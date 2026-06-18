@@ -33,8 +33,11 @@ bestätigen/vervollständigen.
 - `NetworkAgent` lädt die **echten HTTP-Funktionen dynamisch aus dem closed-source-Plugin**
   `libbambu_networking` (`get_network_function("bambu_network_get_filament_spools")` etc.,
   siehe `src/slic3r/Utils/NetworkAgent.cpp:356`).
-- **→ Konsequenz:** Host + finaler Pfad stehen NICHT im offenen Code und müssen per
-  Traffic-Capture ermittelt werden. Alles andere (Methoden, Felder, Query-Params) ist bekannt.
+- **→ Konsequenz:** Host + finaler Pfad stehen NICHT im offenen BambuStudio-Code. Aber:
+  Open-Source-Reimplementierungen des Plugins (siehe §1.5) haben Host + URL-Präfix +
+  Auth-Flow bereits dokumentiert. Nur die **exakten Filament-/RFID-Pfade + Bodies** sind
+  nirgends dokumentiert und müssen per Traffic-Capture ermittelt werden.
+  Methoden, Felder und Query-Params sind aus dem Code bekannt.
 
 ### 1.2 Bekannte Endpoint-Operationen
 
@@ -48,6 +51,22 @@ bestätigen/vervollständigen.
 
 Quellen: `src/slic3r/GUI/fila_manager/wgtFilaManagerCloudClient.cpp`,
 `src/slic3r/Utils/bambu_networking.hpp:258` (`FilamentQueryParams`, `FilamentDeleteParams`).
+
+### 1.2.1 Primäres Capture-Ziel (starke Hypothese)
+
+Durch Kombination zweier Quellen ergibt sich ein konkreter Such-Endpoint, den die Session
+**zuerst** verifizieren soll (statt blind zu suchen):
+
+- BambuStudio-Code-Kommentar: Update-Route = **`/my/filament/v2`** (`wgtFilaManagerCloudClient.cpp:139`).
+- `ClusterM/open-bambu-networking` belegt für dieselbe Service-Familie: `POST /v1/user-service/my/task`.
+
+→ **Hypothese für den vollen Filament-Endpoint:**
+```
+https://api.bambulab.com/v1/user-service/my/filament/v2     (Global)
+https://api.bambulab.cn/v1/user-service/my/filament/v2      (China)
+```
+Falls der Capture stattdessen einen `/v1/iot-service/api/...`-Pfad zeigt (die zweite belegte
+Service-Familie), ist auch das zu dokumentieren. Beide Präfixe sind in §1.5 belegt.
 
 ### 1.3 Bekanntes Cloud-JSON-Schema (camelCase) — „FilamentV2"
 
@@ -84,6 +103,33 @@ Claude soll die per Capture beobachteten Felder hiergegen abgleichen und Lücken
 
 - Listen-Responses enthalten die Spools unter dem Schlüssel **`filaments`** (Array)
   (`wgtFilaManagerCloudSync.cpp:33`). Paginierung über `offset` / `limit`.
+
+### 1.5 Belegte Erkenntnisse aus Open-Source-Reimplementierungen des Plugins
+
+Mehrere Community-Projekte haben `libbambu_networking` per Reverse Engineering nachgebaut
+bzw. dokumentiert (siehe §9 für Provenienz/Recht). Daraus ist Folgendes **bereits belegt** —
+das ist das Gerüst, in das die Filament-Pfade nur noch eingehängt werden müssen:
+
+- **Cloud-Hosts (bestätigt):**
+  - Global: `https://api.bambulab.com`
+  - China: `https://api.bambulab.cn`
+  - Dev: `https://api-dev.bambu-lab.com`
+- **URL-Präfix-Familien (bestätigt):**
+  - `/v1/iot-service/api/...` — z. B. Presets (`GET /v1/iot-service/api/slicer/setting`),
+    Projekte/Uploads (`/v1/iot-service/api/user/project`, `/v1/iot-service/api/user/upload`).
+  - `/v1/user-service/my/...` — z. B. `POST /v1/user-service/my/task`.
+    **→ wahrscheinlichste Heimat des Filament-Endpoints (`/my/filament/v2`).**
+- **Auth-Flow (bestätigt):** Login-Ticket → `bambu_network_get_my_token(ticket)` liefert den
+  Token; danach werden „sticky" Header (User-Agent etc.) über
+  `bambu_network_set_extra_http_header` / `Slic3r::Http::set_extra_headers` mitgeschickt.
+  Das exakte `Authorization`-Header-Format (Bearer vs. Custom) ist in den Quellen **nicht**
+  abschließend dokumentiert → beim Capture explizit festhalten.
+- **Filament-Symbole bestätigt vorhanden** ab ABI `02.06.00`
+  (`bambu_network_{get,create,update,delete}_filament_spool(s)`, `..._get_filament_config`),
+  aber als reines „HTTP plumbing" — die **konkreten Pfade sind in keinem Projekt dokumentiert**.
+
+> **Kernaussage:** Host, Präfix und Auth sind erledigt. Offen — und Ziel des Captures —
+> bleiben nur die exakten Filament-/Spool-/RFID-**Pfade** und die realen Request/Response-Bodies.
 
 ---
 
@@ -236,8 +282,13 @@ Code-Felder (§1.3) gegenprüfen — Abweichungen/neue Felder explizit markieren
   in `libbambu_networking`. Optionen:
   - Prüfen, ob nur ein Teil (Account/REST) gepinnt ist und MQTT separat läuft.
   - SSLKEYLOGFILE / andere Interception-Methoden evaluieren.
-  - Falls Pinning hart ist: API-Pfade alternativ aus Community-Projekten
-    (`pybambu`, `bambulabs-api`) verifizieren und nur die **Felder** per Code (§1.3) bestätigen.
+  - **Plan B (sehr ergiebig): Quelltext der Open-Source-Reimplementierungen lesen** (siehe §9).
+    `ClusterM/open-bambu-networking` und SFC `baltobu/reverse-networking` haben den
+    HTTP-/Header-/Auth-Aufbau im Klartext und legen Host + `/v1/...`-Präfixe offen. Damit
+    lassen sich Host/Präfix/Auth ohne Live-Capture bestätigen; nur die exakten
+    Filament-Pfade müssen ggf. weiter eingegrenzt werden.
+  - Zusätzlich: API-Pfade aus Community-Projekten (`pybambu`, `bambulabs-api`) gegenprüfen
+    und die **Felder** per Code (§1.3) verifizieren.
 - **Bambu Studio ignoriert System-Proxy:** Proxifier / explizite `HTTPS_PROXY`-Env testen.
 - **Token läuft ab (~3 Monate):** im Auth-Doku festhalten, wie er erneuert wird
   (Cookie `token` neu aus dem Browser ziehen).
@@ -270,3 +321,24 @@ Code-Felder (§1.3) gegenprüfen — Abweichungen/neue Felder explizit markieren
 | NetworkAgent → closed-source-Plugin-Bindung | `src/slic3r/Utils/NetworkAgent.cpp:356` |
 | Lokales Spool-Schema (für Sync-Mapping) | `src/slic3r/GUI/fila_manager/wgtFilaManagerStore.h` / `.cpp` |
 | Lokale Datei | `<data_dir>/filament_inventory/spools.json` |
+
+---
+
+## 9. Externe Referenz-Implementierungen & Provenienz
+
+Mehrere Open-Source-Projekte haben das proprietäre `libbambu_networking`-Plugin
+nachgebaut/dokumentiert. Sie sind die wichtigste **Plan-B-Quelle** (§6) und liefern bereits
+Host, URL-Präfixe und den Auth-Flow (§1.5).
+
+| Projekt | Was es liefert | Bezug |
+|---------|----------------|-------|
+| **`ClusterM/open-bambu-networking`** | Open-Source-Drop-in-Ersatz des Plugins. Dokumentiert in `NETWORK_PLUGIN.md` Cloud-Hosts, `/v1/iot-service/api/...` + `/v1/user-service/my/...`-Pfade, Auth-/Header-Mechanik. **Filament-/RFID-Pfade ausdrücklich NICHT im Scope** (LAN-first). | https://github.com/ClusterM/open-bambu-networking |
+| **SFC `baltobu/reverse-networking`** | Software Freedom Conservancy reverse-engineert die AGPLv3-Binaries (`libbambu_networking.so/.dll/.dylib`) sauber als „Corresponding Source". Maßgeblichste, rechtlich getragene Referenz. | https://f.sfconservancy.org/baltobu/reverse-networking |
+| `jarczakpawel/OrcaSlicer-bambulab` | Ursprünglicher OrcaSlicer-Fork mit eigener Rust-Netzwerkimplementierung (nach Cease-and-Desist entfernt; von SFC unter „baltobu" fortgeführt). | (Repo entfernt; Kontext via SFC) |
+| `pybambu`, `bambulabs-api` | Community-Python-Clients; nützlich zum Gegenprüfen von Auth-Flow und Pfaden. | GitHub |
+
+**Provenienz/Recht:** Diese Projekte entstanden aus dem AGPLv3-Streit um Bambu Studios
+nicht veröffentlichten Plugin-Quellcode (2026). Sie sind als technische Referenz legitim;
+für unser Vorhaben (Zugriff auf **eigene** Account-Daten zwecks Spoolman-Sync) dienen sie
+ausschließlich der Endpoint-/Protokoll-Verifikation. Keine Binaries aus unklaren Quellen
+einbinden — bei Bedarf selbst aus dem Quelltext bauen.
