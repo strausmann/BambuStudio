@@ -157,13 +157,14 @@ Onboarding hat **zwei** Stufen — und die Bridge kann beide beschleunigen:
    Farbname). So entsteht „PLA Basic Grau" in Spoolman, ohne dass du es manuell anlegst.
 2. **Physische Rolle (RFID) fehlt?** → Spool unter dieser Sorte anlegen (§4.1).
 
-> **SKU-/Karton-Scan (App):** Das Scannen des Bambu-Kartons (SKU/QR) ist eine **reine
-> Android-App-Funktion** — die SKU taucht **nicht** in der MQTT-Telemetrie oder im offenen
-> Code auf. Der **maschinelle Sorten-Anker der Bridge** ist daher `tray_info_idx`
-> (Preset-ID, z. B. `GFL99`) + Farbe, nicht die SKU. Der App-Scan bleibt aber nützlich: er
-> befüllt schnell **Bambus eigene** Bibliothek, die du dann per Cloud-REST-Import (§6) in
-> einem Rutsch nach Spoolman übernehmen kannst. Optional kann die Bridge eine eigene
-> **SKU→Attribute-Tabelle** pflegen, falls du SKUs manuell erfassen willst.
+> **Zwei Labels pro Karton (bestätigt aus Fotos):**
+> - **Bambu-Originallabel** trägt nur den **SKU-Code** (Bambus maschinenlesbarer Produktcode,
+>   identifiziert Sorte = Material+Farbe). Die SKU steckt **nicht** in der MQTT-Telemetrie →
+>   maschineller Sorten-Anker der Bridge bleibt `tray_info_idx` + Farbe; die SKU kann optional
+>   als zusätzlicher Match-Key / via App genutzt werden.
+> - **Selbst gedrucktes Spoolman-Label** (Label-Printer-Hub) mit **QR → Spoolman-Spule**
+>   (`/spool/{id}`) + #Zahl + Material/Temps. **Ein Karton = eine physische Rolle = eine
+>   Spoolman-Spule.** Dieser QR ist der **schnelle Bind-Schlüssel** beim Einlegen (§5.1).
 
 ### 4.1.2 #Zahl-Konvention
 
@@ -213,8 +214,16 @@ Spule eingelegt
                  │           └▶ Mapping speichern: tag_uid → spool_id
                  ├▶ Sorte fehlt → "Neue Sorte aus Tray-Daten anlegen?" (§4.1.1 Stufe 1)
                  │     └▶ POST /filament  → danach POST /spool
-                 └▶ (optional) Auto-Vorschlag: Match über tray_info_idx + Farbe
+                 ├▶ Auto-Vorschlag: Match über tray_info_idx + Farbe (+ optional SKU)
+                 └▶ SCHNELL-BIND: Spoolman-QR vom Karton scannen (PWA)
+                       └▶ liefert /spool/{id} direkt → Mapping tag_uid → spool_id
 ```
+
+> **Schnell-Bind per Karton-QR:** Da dein Spoolman-Label den QR **`/spool/{id}`** trägt
+> (eine Rolle = eine Spule), entfällt die Auswahl aus einer Liste: in der PWA beim
+> „Neue Spule"-Prompt einfach den **Karton-QR scannen** → die Bridge kennt die exakte
+> Spoolman-Spule und verknüpft sie mit der gerade erkannten `tag_uid`. Das ist auch der
+> sauberste Weg für **reassigned** Tags (§5.4): QR der Drittanbieter-Spule scannen → binden.
 
 - **Komfort:** Die Bridge kann anhand `tray_type` + `tray_color` + `tray_info_idx` einen
   **Vorschlag** machen, welche #Zahl passt; der Nutzer bestätigt nur noch. Fehlt die Sorte
