@@ -255,6 +255,54 @@ Kombiniert beide Strategien (du hast „beides" gewählt):
 - **Konfliktregel:** Pro-Job ist führend; Reconcile korrigiert nur, wenn die Abweichung
   eine Schwelle überschreitet (z. B. >3 %), um „Zappeln" zu vermeiden.
 
+### 5.4 RFID-Tag-Lebenszyklus & Wiederverwendung
+
+Realität deines Workflows: Spulen werden **nicht** vorsorglich ins AMS gelegt (Vakuumbeutel,
+viele **Refills** ohne Reel). Leere Spulen werden behalten, und **Bambu-RFID-Tags werden
+physisch weiterverwendet** — z. B. per gedrucktem Adapter auf **Sunlu-Gen3-Spulen**. Daraus
+folgt ein eigenständiges **Tag-Inventar** entkoppelt vom Spulen-Inventar.
+
+**Kernprinzip — `tag_uid` ist nur ein stabiler Identifier, kein Materialnachweis:**
+Ein Bambu-Tag ist **read-only verschlüsselt**. Hängt er an einer Sunlu-Spule, meldet das AMS
+weiterhin die **alte Bambu-Codierung** (`tray_type`, `tray_color`). → Die Bridge muss bei
+**reassigned** Tags **ihre eigene Zuordnung bevorzugen** und die MQTT-Materialfelder ignorieren.
+
+**Tag-Zustände** (`tag_registry`, §7):
+
+| Zustand | Bedeutung |
+|---------|-----------|
+| `bambu_original` | Tag sitzt noch auf seiner originalen Bambu-Spule/Refill |
+| `freed` | Bambu-Filament aufgebraucht, Tag abgenommen → **Pool wiederverwendbarer Tags** |
+| `reassigned` | Tag auf Drittanbieter-Spule montiert, zeigt auf eine **andere** Spoolman-Spule |
+
+**Abläufe:**
+- **Tag freigeben:** Spule leer → in der PWA „Tag freigeben" → Zustand `freed`,
+  Spoolman-Spule archivieren. Der `tag_uid` bleibt im Inventar.
+- **Tag neu zuweisen:** PWA „Tag auf Spule montieren" → Drittanbieter-Spoolman-Spule wählen
+  (oder neu anlegen) → Zustand `reassigned`, Mapping `tag_uid → neue spool_id`, **Verlauf**
+  protokollieren (`tag_history`). **Restmenge auf voll** (= `initial_weight`) setzen.
+- **Erkennung beim Einlegen:** kommt ein `tag_uid` per MQTT,
+  - `bambu_original` → normaler Bambu-Pfad (§5.1).
+  - `reassigned` → Mapping nutzen, **MQTT-Material ignorieren**, ggf. Slot korrigieren (§5.5).
+  - `freed` (aber wieder eingelegt, noch nicht neu zugewiesen) → PWA-Prompt „Tag X ist frei —
+    auf welche Spule montiert?".
+
+> **Refill-Hinweis:** Refills haben einen **eigenen frischen RFID** → werden wie normale
+> Bambu-Spulen behandelt; nur das `spool_weight` (Reel) unterscheidet sich, je nachdem auf
+> welche behaltene Leerspule der Refill gesetzt wird.
+
+### 5.5 AMS-Slot-Korrektur per MQTT (für reassigned Tags)
+
+Damit der **Drucker** nicht „Bambu PLA Red" druckt, obwohl Sunlu PETG geladen ist, kann die
+Bridge die Slot-Einstellung aktiv überschreiben — analog zu OpenSpool:
+
+- MQTT-Kommando `print.command = "ams_filament_setting"` mit `ams_id`, `tray_id`,
+  `tray_info_idx`/`setting_id`, `tray_color`, `tray_type`, `nozzle_temp_min/max`
+  (vgl. `MachineObject::command_ams_filament_settings`, `DeviceManager.cpp:1667`).
+- Quelle der korrekten Werte: die zugeordnete **Spoolman-Spule** (Material, Farbe, Temps).
+- **Voraussetzung:** neuere Firmware braucht **LAN-Mode + Developer-Mode** (OpenSpool-Erkenntnis).
+- Optional/aktivierbar (`config.yaml: ams.override_settings: true`).
+
 ---
 
 ## 6. Optionale Anreicherung über die Cloud-Filament-Bibliothek (REST)
@@ -289,6 +337,18 @@ CREATE TABLE slot_state (               -- letzte bekannte Belegung je Slot
 CREATE TABLE job_log (                  -- Verbrauchsbuchungen (Idempotenz)
     job_id TEXT PRIMARY KEY, tag_uid TEXT, used_g REAL, booked_at TEXT
 );
+CREATE TABLE tag_registry (             -- Tag-Inventar (entkoppelt vom Spulen-Inventar, §5.4)
+    tag_uid        TEXT PRIMARY KEY,
+    state          TEXT NOT NULL,       -- bambu_original | freed | reassigned
+    current_spool  INTEGER,             -- aktuell zugeordnete Spoolman-Spool-ID (oder NULL)
+    origin         TEXT,                -- z.B. ursprüngliche Bambu-Sorte/#Zahl
+    freed_at       TEXT, updated_at TEXT
+);
+CREATE TABLE tag_history (              -- Verlauf der (Neu-)Zuweisungen
+    id INTEGER PRIMARY KEY, tag_uid TEXT, spoolman_id INTEGER,
+    action TEXT,                        -- assign | free | reassign
+    note TEXT, at TEXT
+);
 ```
 
 ---
@@ -306,6 +366,16 @@ CREATE TABLE job_log (                  -- Verbrauchsbuchungen (Idempotenz)
 - **Spool-Wechsel im selben Slot:** Slot-State-Tabelle erkennt `tag_uid`-Wechsel → sauberer
   Übergang (alte Spule final reconcilen, neue ggf. onboarden).
 - **MQTT-Reconnect & Vollzustand:** nach jedem Reconnect erneut `pushall` senden.
+- **Reassigned Tags melden falsches Material.** Bambu-Tags sind read-only → ein auf eine
+  Sunlu-Spule montierter Tag meldet weiter die alte Bambu-Codierung. Die Bridge **muss** für
+  `reassigned` Tags die eigene Zuordnung bevorzugen (§5.4) und kann den Slot per MQTT
+  korrigieren (§5.5, nur mit LAN+Developer-Mode).
+- **„Voll"-Reset bei Wiederverwendung:** Bambu setzt einen wiederverwendeten Tag i. d. R.
+  auf voll und zählt Verbrauch neu; die Bridge spiegelt das, indem sie bei Reassignment die
+  Spoolman-Restmenge auf `initial_weight` setzt (interne Buchung führt, nicht das `remain` des
+  alten Tags vertrauen).
+- **Tag-Identität ≠ Spulen-Identität:** ein leerer/„freed" Tag, der wieder im AMS auftaucht,
+  darf **nicht** automatisch als alte Spule getrackt werden → erst Reassignment abfragen.
 
 ---
 
