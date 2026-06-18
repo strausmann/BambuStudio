@@ -126,10 +126,13 @@ bambu_account:
   token: "<jwt-or-empty>"
 spoolman:
   base_url: "http://spoolman:7912"
-  rfid_field: "bambu_rfid"     # Spoolman Extra-Field (siehe §4.2)
+  tag_field: "tag"             # Community-Konvention (§4.2), NICHT bambu_rfid
+  slot_field: "active_tray"
 consumption:
   mode: combined               # per_job | remain | combined
   reconcile_on_unload: true
+ams:
+  override_settings: false     # kein Developer Mode → MQTT-Slot-Override aus (§5.5)
 ```
 
 ---
@@ -185,25 +188,35 @@ deine bestehende Benennungs- und Label-Logik erhalten bleibt. Maschinell ist die
 RFID-Mapping aber **nicht mehr zwingend** — sie dient der menschlichen Lesbarkeit und als
 Aufdruck auf dem QR-Label.
 
-### 4.2 RFID-Speicherung in Spoolman
+### 4.2 RFID-Speicherung in Spoolman — Community-Konvention (Interop!)
 
-- Empfehlung: in Spoolman ein **Extra-Field** `bambu_rfid` (Typ Text) definieren
-  (Settings → Extra fields → Spool) und die `tag_uid` dort ablegen.
-- Alternativ das eingebaute `lot_nr`-Feld verwenden (einfacher, aber zweckentfremdet).
-- Lookup einer Spule: `GET /api/v1/spool?...` und clientseitig nach `extra.bambu_rfid`
-  filtern, plus lokaler SQLite-Cache als schneller Index.
+Damit **BambuSpoolPal** (Android) und **OpenSpoolMan** parallel/austauschbar nutzbar sind,
+verwenden wir **die gleichen Spoolman-Extra-Fields** wie OpenSpoolMan (de-facto-Standard):
+
+| Ebene | Extra-Field | Inhalt |
+|-------|-------------|--------|
+| Spool | **`tag`** | RFID/NFC-Tag-UID (`tag_uid`) |
+| Spool | **`active_tray`** | aktueller AMS-Slot |
+| Filament | **`filament_id`** | Bambu Filament-Preset-ID (z. B. `GFL99`) |
+| Filament | **`type`** | Material-Variante (Basic/Matte/CF/…) |
+| Filament | **`nozzle_temperature`** | Temperaturbereich °C |
+
+- **Wichtig:** Nicht das frühere `bambu_rfid`/`location` verwenden, sondern **`tag`** und
+  **`active_tray`** — sonst sind App und Bridge nicht kompatibel.
+- Lookup einer Spule: `GET /api/v1/spool` + clientseitiger Filter auf `extra.tag`,
+  plus lokaler SQLite-Cache als schneller Index.
 
 ### 4.3 Genutzte Spoolman-Endpoints
 
 | Zweck | Methode/Pfad |
 |-------|--------------|
-| Filamente listen (#Zahl → filament_id) | `GET /api/v1/filament` |
-| **Sorte anlegen** (falls fehlt, §4.1.1 Stufe 1) | `POST /api/v1/filament` `{vendor_id/name, material, color_hex, name, weight}` |
-| Spule(n) suchen | `GET /api/v1/spool` (+ clientseitiger Filter auf `extra.bambu_rfid`) |
-| Spule anlegen | `POST /api/v1/spool` `{filament_id, initial_weight, extra:{bambu_rfid:"<UID>"}}` |
+| Filamente listen (Sorte → filament_id) | `GET /api/v1/filament` |
+| **Sorte anlegen** (falls fehlt, §4.1.1 Stufe 1) | `POST /api/v1/filament` `{vendor_id/name, material, color_hex, name, weight, extra:{type, nozzle_temperature, filament_id}}` |
+| Spule(n) suchen | `GET /api/v1/spool` (+ clientseitiger Filter auf `extra.tag`) |
+| Spule anlegen | `POST /api/v1/spool` `{filament_id, initial_weight, extra:{tag:"<UID>"}}` |
 | Restgewicht setzen (Reconcile) | `PUT /api/v1/spool/{id}` `{remaining_weight: <g>}` |
 | Verbrauch buchen (pro Job) | `PUT /api/v1/spool/{id}/use` `{use_weight: <g>}` |
-| **AMS-Slot pflegen** (§5.3) | `PUT /api/v1/spool/{id}` `{location: "<printer>/AMS<id>/Slot<n>"}` |
+| **AMS-Slot pflegen** (§5.3) | `PUT /api/v1/spool/{id}` `{extra:{active_tray:"<printer>/AMS<id>/Slot<n>"}}` |
 
 ---
 
@@ -243,14 +256,15 @@ Spule eingelegt
 
 ### 5.3 AMS-Slot-Pflege in Spoolman
 
-Spoolman hat pro Spool ein **`location`-Feld** — ideal, um den aktuellen AMS-Slot abzubilden:
+Den aktuellen AMS-Slot bilden wir im Spool-Extra-Field **`active_tray`** ab (Community-Konvention,
+§4.2); zusätzlich kann das eingebaute `location`-Feld für „Lager" genutzt werden:
 
 ```
 Tray-Update (tag_uid bekannt)
-   └▶ location der Spool setzen: "<printer>/AMS<ams_id>/Slot<tray_id>"
-      └▶ alte Belegung desselben Slots (anderer tag_uid) → location dort leeren
+   └▶ active_tray der Spool setzen: "<printer>/AMS<ams_id>/Slot<tray_id>"
+      └▶ alte Belegung desselben Slots (anderer tag_uid) → active_tray dort leeren
 Entladen (Slot wird leer / tag_uid wechselt)
-   └▶ location der vorigen Spool leeren (oder auf "Lager" setzen) + Reconcile (§5.2)
+   └▶ active_tray der vorigen Spool leeren (location ggf. auf "Lager") + Reconcile (§5.2)
 ```
 
 - Quelle der Slot-Belegung = `slot_state`-Tabelle (§7): Schlüssel `(device_serial, ams_id, tray_id)`.
@@ -282,46 +296,62 @@ viele **Refills** ohne Reel). Leere Spulen werden behalten, und **Bambu-RFID-Tag
 physisch weiterverwendet** — z. B. per gedrucktem Adapter auf **Sunlu-Gen3-Spulen**. Daraus
 folgt ein eigenständiges **Tag-Inventar** entkoppelt vom Spulen-Inventar.
 
-**Kernprinzip — `tag_uid` ist nur ein stabiler Identifier, kein Materialnachweis:**
+**Kernprinzip — `tag_uid` ist ein stabiler Identifier, die Bambu-Codierung bleibt aber aktiv:**
 Ein Bambu-Tag ist **read-only verschlüsselt**. Hängt er an einer Sunlu-Spule, meldet das AMS
-weiterhin die **alte Bambu-Codierung** (`tray_type`, `tray_color`). → Die Bridge muss bei
-**reassigned** Tags **ihre eigene Zuordnung bevorzugen** und die MQTT-Materialfelder ignorieren.
+weiterhin die **alte Bambu-Codierung** (`tray_type`, `tray_color`) — und **der Drucker druckt
+mit diesem Profil**.
 
-**Tag-Zustände** (`tag_registry`, §7):
+> **Primärregel (wegen fehlendem Developer Mode!): Tag nur auf material-/farbgleiche Spule
+> wiederverwenden.** Beispiel: ein „PLA Basic White"-Tag → nur wieder auf eine weiße
+> PLA-Basic-Spule (Bambu **oder** Sunlu — Sunlu gilt als baugleich/kompatibel). Dann stimmt
+> die Bambu-Codierung weiter mit der Realität überein, der Drucker druckt korrekt, und es
+> braucht **keine** Slot-Korrektur. **Niemals** einen PLA-Tag auf eine PETG-CF-Spule (falsche
+> Temperaturen!). Die Bridge erzwingt das über eine **Kompatibilitätsprüfung** (s. u.).
+
+**Tag-Zustände** (`tag_registry`, §7) — inkl. **gespeicherter Tag-Metadaten** für die Übersicht:
 
 | Zustand | Bedeutung |
 |---------|-----------|
 | `bambu_original` | Tag sitzt noch auf seiner originalen Bambu-Spule/Refill |
 | `freed` | Bambu-Filament aufgebraucht, Tag abgenommen → **Pool wiederverwendbarer Tags** |
-| `reassigned` | Tag auf Drittanbieter-Spule montiert, zeigt auf eine **andere** Spoolman-Spule |
+| `reassigned` | Tag auf material-/farbgleicher Spule (Bambu/Sunlu) montiert |
+
+Pro Tag werden **Material, Farbe, Temps, Sollgewicht** (aus der ursprünglichen Bambu-Codierung)
+gespeichert → die **„Freie Tags"-Übersicht** zeigt z. B. „Tag A1B2 = PLA Basic White, 220 °C"
+und lässt eine Neuzuweisung **nur auf kompatible Spulen** zu (Material muss matchen; Farbe als
+Warnung). So wird verhindert, dass ein PLA-Tag auf PETG-CF landet — oder umgekehrt.
 
 **Abläufe:**
 - **Tag freigeben:** Spule leer → in der PWA „Tag freigeben" → Zustand `freed`,
-  Spoolman-Spule archivieren. Der `tag_uid` bleibt im Inventar.
-- **Tag neu zuweisen:** PWA „Tag auf Spule montieren" → Drittanbieter-Spoolman-Spule wählen
-  (oder neu anlegen) → Zustand `reassigned`, Mapping `tag_uid → neue spool_id`, **Verlauf**
-  protokollieren (`tag_history`). **Restmenge auf voll** (= `initial_weight`) setzen.
+  Spoolman-Spule archivieren. Tag-Metadaten bleiben erhalten.
+- **Tag neu zuweisen:** PWA „Tag auf Spule montieren" → es werden **nur kompatible** Spoolman-
+  Spulen angeboten (gleiches Material) → Zustand `reassigned`, Mapping `tag_uid → neue spool_id`,
+  **Verlauf** (`tag_history`), **Restmenge auf voll** (= `initial_weight`).
 - **Erkennung beim Einlegen:** kommt ein `tag_uid` per MQTT,
-  - `bambu_original` → normaler Bambu-Pfad (§5.1).
-  - `reassigned` → Mapping nutzen, **MQTT-Material ignorieren**, ggf. Slot korrigieren (§5.5).
-  - `freed` (aber wieder eingelegt, noch nicht neu zugewiesen) → PWA-Prompt „Tag X ist frei —
-    auf welche Spule montiert?".
+  - `bambu_original` / `reassigned` → über Mapping zur Spoolman-Spule (Material stimmt ohnehin).
+  - `freed` (wieder eingelegt, noch nicht zugewiesen) → PWA-Prompt „Tag X (PLA White) ist frei —
+    auf welche **kompatible** Spule montiert?".
 
 > **Refill-Hinweis:** Refills haben einen **eigenen frischen RFID** → werden wie normale
 > Bambu-Spulen behandelt; nur das `spool_weight` (Reel) unterscheidet sich, je nachdem auf
 > welche behaltene Leerspule der Refill gesetzt wird.
 
-### 5.5 AMS-Slot-Korrektur per MQTT (für reassigned Tags)
+### 5.5 AMS-Slot-Korrektur per MQTT — NICHT im Standardpfad (kein Developer Mode)
 
-Damit der **Drucker** nicht „Bambu PLA Red" druckt, obwohl Sunlu PETG geladen ist, kann die
-Bridge die Slot-Einstellung aktiv überschreiben — analog zu OpenSpool:
+> **Für dieses Setup deaktiviert.** Das aktive Überschreiben der Slot-Einstellung per MQTT
+> (`ams_filament_setting`) bräuchte **LAN-Mode + Developer-Mode** — und Developer-Mode
+> **deaktiviert die Bambu-Cloud**, was du nicht willst. Deshalb ist die **Parameter-Gleichheit
+> bei der Tag-Wiederverwendung (§5.4 Primärregel) der eigentliche Lösungsweg**: Tag nur auf
+> material-/farbgleiche Spule → Drucker druckt automatisch korrekt, kein Override nötig.
 
-- MQTT-Kommando `print.command = "ams_filament_setting"` mit `ams_id`, `tray_id`,
-  `tray_info_idx`/`setting_id`, `tray_color`, `tray_type`, `nozzle_temp_min/max`
-  (vgl. `MachineObject::command_ams_filament_settings`, `DeviceManager.cpp:1667`).
-- Quelle der korrekten Werte: die zugeordnete **Spoolman-Spule** (Material, Farbe, Temps).
-- **Voraussetzung:** neuere Firmware braucht **LAN-Mode + Developer-Mode** (OpenSpool-Erkenntnis).
-- Optional/aktivierbar (`config.yaml: ams.override_settings: true`).
+- **Default:** `ams.override_settings: false` (passt zu deinem Setup).
+- Nur als **optionale Funktion** dokumentiert, falls jemand Developer-Mode fährt: MQTT-Kommando
+  `print.command = "ams_filament_setting"` (`ams_id`, `tray_id`, `tray_info_idx`/`setting_id`,
+  `tray_color`, `tray_type`, `nozzle_temp_min/max`; vgl.
+  `MachineObject::command_ams_filament_settings`, `DeviceManager.cpp:1667`).
+- **Mismatch-Fallback ohne Override:** weicht ein Tag doch ab, **warnt** die Bridge nur
+  (Spoolman-Tracking bleibt korrekt über das Mapping) — die richtige Filament-Auswahl trifft
+  man dann **manuell im Slicer** für den Druck.
 
 ---
 
@@ -336,6 +366,33 @@ gepflegten Bibliothek (Namen, #Zahlen, Sollgewichte, RFIDs) nach Spoolman, statt
   `totalNetWeight`, `netWeight` → kann initial nach Spoolman gemappt werden
   (Feld-Tabelle: Spec §1.3).
 - Pfad ist noch per Capture/Static-Analysis zu bestätigen (Spec §3/§3b).
+
+### 6.1 Offene Fragen zur Bambu-Eigenlogik (→ hier wird das Cloud-API-RE relevant)
+
+Zwei Verhaltensfragen lassen sich **nicht** sicher aus dem offenen Code beantworten — sie sind
+genau der Grund, warum das **RE der Filament-Cloud-API** (Spec-Dokument) wertvoll bleibt:
+
+1. **Verknüpft Bambu eine neu erkannte RFID mit einer zuvor per Scan/Manuell angelegten Spule —
+   oder fragt es danach?**
+   - **Indiz aus deinem Screenshot:** Unter „PLA Basic Rot" existieren **„#"** (mit RFID-Badge)
+     **und** **„#38"** (ohne RFID, manuell). Das deutet stark darauf hin, dass Bambu **nicht
+     fragt/merged**, sondern beim AMS-Read einen **separaten** Datensatz anlegt
+     (`createType=ams`) neben dem manuellen (`createType=manual`).
+   - **Konsequenz:** Genau diese **Dublette aufzulösen** (RFID-Record ↔ manueller #Zahl-Record)
+     ist eine Kernaufgabe **unserer** Bridge — Bambu macht es offenbar nicht.
+
+2. **Wie „vergisst" der Filament Manager die #Zahl↔RFID-Zuweisung, wenn ein Tag (leer) neu
+   verwendet wird?**
+   - Vermutlich über `update`/`delete` auf dem Cloud-Record (vgl. Spec §1.2: `PUT`/`DELETE`
+     `/my/filament/v2`). Bestätigung erfordert Capture/RE.
+   - **Unsere Unabhängigkeit:** Die Bridge führt ihr **eigenes** `tag_registry`/Mapping (§7) —
+     sie ist damit **nicht** davon abhängig, wie Bambu intern auf-/abräumt. Optional kann sie
+     über die RE'd Endpoints Bambus Bibliothek **mitpflegen** (Record löschen/aktualisieren),
+     ist aber nicht darauf angewiesen.
+
+> **Verifikationsauftrag** (für die Capture-/RE-Session, Spec-Dokument): Beim Einlegen einer
+> Spule, deren #Zahl bereits manuell angelegt wurde, beobachten, ob ein neuer `ams`-Record
+> entsteht und ob/wie der manuelle Record verändert wird; sowie das Verhalten bei Tag-Reuse.
 
 ---
 
@@ -361,7 +418,13 @@ CREATE TABLE tag_registry (             -- Tag-Inventar (entkoppelt vom Spulen-I
     tag_uid        TEXT PRIMARY KEY,
     state          TEXT NOT NULL,       -- bambu_original | freed | reassigned
     current_spool  INTEGER,             -- aktuell zugeordnete Spoolman-Spool-ID (oder NULL)
-    origin         TEXT,                -- z.B. ursprüngliche Bambu-Sorte/#Zahl
+    tag_class      TEXT,                -- bambu_readonly | custom_ndef  (§9.3)
+    -- Tag-Metadaten (aus Bambu-Codierung) für Übersicht + Kompatibilitätsprüfung:
+    meta_material  TEXT,                -- z.B. "PLA Basic"  -> Match-Pflicht bei Reassign
+    meta_color     TEXT,                -- z.B. "White"      -> Warnung bei Abweichung
+    meta_temp_min  INTEGER, meta_temp_max INTEGER,
+    meta_full_g    REAL,                -- Sollgewicht voll
+    origin         TEXT,                -- ursprüngliche Bambu-Sorte/#Zahl
     freed_at       TEXT, updated_at TEXT
 );
 CREATE TABLE tag_history (              -- Verlauf der (Neu-)Zuweisungen
@@ -433,6 +496,27 @@ Gewichtserkennung per Kamera. → Ideal für **dein Karton-/Erst-Onboarding** pe
   schreiben, Spoolman-ID/#Zahl mit einbetten.
 - **Bambu-Tag-Lesen** bleibt **MQTT (im AMS)** bzw. **native App (vor dem AMS)** — nicht PWA.
 
+### 9.3 Zwei Tag-Klassen + ESP32-/OpenSpool-Kompatibilität
+
+Die Bridge unterscheidet zwei Tag-Klassen (`tag_class` in `tag_registry`, §7):
+
+| Klasse | Beispiel | Lesbar/Schreibbar | Wiederverwendung |
+|--------|----------|-------------------|------------------|
+| `bambu_readonly` | Original-Bambu-Tag | nur **lesen** (AMS→MQTT; native App) | nur auf **material-/farbgleiche** Spule (§5.4) |
+| `custom_ndef` | OpenSpool-/OpenTag (NTAG215/216) | **lesen + schreiben** (PWA Web NFC, ESP32) | frei **überschreibbar** — z. B. „Overture PLA Gelb" → „Sunlu PETG White" |
+
+**ESP32 (OpenSpool-Gerät) als Lese-/Schreibstation:**
+- Gedacht zum **Scannen/Beschreiben von Dritthersteller- & Custom-Tags** neben dem Drucker.
+- **Interop über das gemeinsame Datenformat:** wir verwenden das **OpenSpool-NDEF-JSON** als
+  Tag-Inhalt **und** die Spoolman-Extra-Fields aus §4.2. Dadurch können ESP32, unsere PWA und
+  die Bridge **dieselben** Custom-Tags lesen/schreiben.
+- **Custom-Tags in Rahmen/Adapter** (gedruckt) wie Bambu-Tags montierbar und **wiederbeschreibbar**;
+  bei Umwidmung wird der NDEF-Inhalt neu geschrieben **und** das Spoolman-Mapping aktualisiert.
+- **Unsere App liest beide Klassen**: `custom_ndef` direkt (NDEF), `bambu_readonly` über MQTT
+  bzw. native App.
+- **Lizenz beachten:** das OpenSpool-**Format/Protokoll** ist offen nutzbar; vor Übernahme von
+  OpenSpool-**Firmware-Code** dessen Custom-Lizenz (`LICENSE-Software.txt`) prüfen (§11).
+
 ---
 
 ## 10. Etikettendruck-Integration (Label-Printer-Hub / Brother)
@@ -487,10 +571,23 @@ druckt auf dem **Brother**-Etikettendrucker (PT-/QL-Serie) ein Label.
 | Match nur über `tray_type` | **Zwei-Ebenen-Onboarding** + Filament-Auto-Create (§4.1.1) |
 | — | **Etikettendruck-Hook** (§10), **PWA-Dritthersteller-Tags** (§9.2) |
 
+### 11.1 Lizenzprüfung (Stand der Recherche)
+
+| Projekt | Lizenz | Konsequenz für uns |
+|---------|--------|--------------------|
+| **`drndos/openspoolman`** | **MIT** ✅ | **Idealer Fork-Basis-Kandidat** — frei forkbar, einfacher Upstream-PR, kombinierbar mit MIT-Code. |
+| **`strausmann/Label-Printer-Hub`** | **MIT** ✅ (deins) | frei integrierbar. |
+| **`MrBambuSpoolPal`** | **GPL-3.0** ⚠️ | Code-Übernahme erzwingt GPL-3.0. → **Nur Interop** (gleiche Spoolman-Felder §4.2), **keinen Code linken**; App bleibt eigenständig. |
+| **`spuder/OpenSpool`** | **Custom/Mehrfach** (HW: OSHWA; SW: `LICENSE-Software.txt`) ⚠️ | **Format/Protokoll** offen nutzbar; vor Übernahme von **Firmware-Code** die Custom-SW-Lizenz genau lesen. |
+| **Bambu `libbambu_networking`** | AGPLv3-Streit (closed) ⛔ | nicht einbinden; nur RE-Erkenntnisse aus dem Spec-Dokument nutzen. |
+
+→ **Empfehlung:** Fork von **openspoolman (MIT)** als Basis; BambuSpoolPal & OpenSpool nur über
+**offene Datenformate** anbinden (kein Code-Linking). Eigene Beiträge MIT halten.
+
 **Vorgehen (Upstream-first):**
-1. **Lizenz prüfen** von `drndos/openspoolman` (bestimmt, ob/wie wir forken & beitragen dürfen).
+1. **Lizenzen geprüft** (s. o.) → openspoolman MIT ist tragfähig.
 2. Auf eigenem **Fork** entwickeln, Features klein & abgegrenzt halten.
-3. Pro Feature **Upstream-PR** anbieten (Multi-AMS, Reconcile, Cloud-Fallback).
+3. Pro Feature **Upstream-PR** anbieten (Multi-AMS, Reconcile, Cloud-Fallback, Tag-Lifecycle).
 4. Wird es angenommen → Upstream nutzen; sonst **Fork pflegen** (Rebase-fähig halten).
 
 ---
