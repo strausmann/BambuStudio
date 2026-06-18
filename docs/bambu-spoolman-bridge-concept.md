@@ -408,17 +408,25 @@ Warnung). So wird verhindert, dass ein PLA-Tag auf PETG-CF landet — oder umgek
 
 ---
 
-## 6. Optionale Anreicherung über die Cloud-Filament-Bibliothek (REST)
+## 6. Cloud-Filament-Bibliothek → Spoolman (REST) — implementiert (Prototyp)
 
-Nicht zwingend für den Use-Case, aber komfortabel für den **Erstimport** deiner bereits
-gepflegten Bibliothek (Namen, #Zahlen, Sollgewichte, RFIDs) nach Spoolman, statt alles manuell.
+Importiert deine im **Filament Manager** gepflegte Bibliothek (Namen, #Zahlen, Sollgewichte,
+RFIDs) nach Spoolman — als Alternative zum manuellen Anlegen.
 
-- Endpoint-Hypothese (siehe Spec-Dokument §1.2.1):
-  `GET https://api.bambulab.com/v1/user-service/my/filament/v2`
-- Liefert die Spool-Liste inkl. `RFID`, `filamentVendor`, `filamentType`, `color`,
-  `totalNetWeight`, `netWeight` → kann initial nach Spoolman gemappt werden
-  (Feld-Tabelle: Spec §1.3).
-- Pfad ist noch per Capture/Static-Analysis zu bestätigen (Spec §3/§3b).
+- **Modul** `app/cloud_library.py`, Aufruf via `POST /api/cloud/import`
+  (`source: live|file`, `dry_run`), plus Buttons in der PWA.
+- **Quelle live:** `GET {api_host}{endpoint}` mit `Authorization: Bearer <token>`.
+  - `api_host` aus Region (EU/US → `api.bambulab.com`, CN → `api.bambulab.cn`).
+  - `endpoint` Default `/v1/user-service/my/filament/v2` — **Hypothese**, per Capture/RE zu
+    bestätigen (Spec §1.2.1); in `config.cloud_library.endpoint` anpassbar.
+- **Quelle file:** ein gespeicherter mitmproxy-Capture (JSON) → **Mapping testbar, bevor der
+  Pfad bestätigt ist** (kein Live-Call nötig).
+- **Mapping** (Feld-Tabelle Spec §1.3): `RFID/filamentVendor/filamentType/filamentName/color/
+  totalNetWeight/netWeight/id` → Spoolman Vendor/Filament/Spool; `extra.tag` = RFID,
+  `extra.cloud_id` = Cloud-`id`, Restgewicht = `netWeight`.
+- **Idempotent:** vorhandene Spulen werden über RFID (`extra.tag`) bzw. `extra.cloud_id` erkannt
+  und **übersprungen** (kein Doppelanlegen). Null-/ungültige RFIDs werden ignoriert.
+- **Empfohlener Ablauf:** erst `dry_run: true` (zeigt would-create/skip), dann echter Import.
 
 ### 6.1 Offene Fragen zur Bambu-Eigenlogik (→ hier wird das Cloud-API-RE relevant)
 

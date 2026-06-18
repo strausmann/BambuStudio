@@ -161,5 +161,21 @@ document.getElementById("nfc-write").addEventListener("click", async () => {
   } catch (e) { alert("Schreibfehler: " + e.message); }
 });
 
+// ---- cloud library import ------------------------------------------------
+async function cloudImport(dryRun) {
+  const out = document.getElementById("cloud-out");
+  out.textContent = dryRun ? "Dry-Run läuft…" : "Import läuft…";
+  try {
+    const r = await api("/api/cloud/import", {
+      method: "POST",
+      body: JSON.stringify({ source: "live", dry_run: dryRun }),
+    });
+    out.textContent = JSON.stringify(r, null, 2);
+    refresh();
+  } catch (e) { out.textContent = "Fehler: " + e.message; }
+}
+document.getElementById("cloud-dry").addEventListener("click", () => cloudImport(true));
+document.getElementById("cloud-import").addEventListener("click", () => cloudImport(false));
+
 refresh();
 setInterval(refresh, 5000);

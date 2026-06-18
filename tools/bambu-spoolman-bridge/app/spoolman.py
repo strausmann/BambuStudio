@@ -58,8 +58,13 @@ class SpoolmanClient:
         return r.json()
 
     def find_spool_by_tag(self, tag_uid: str) -> dict | None:
+        return self.find_spool_by_extra(self.tag_field, tag_uid)
+
+    def find_spool_by_extra(self, key: str, value: str) -> dict | None:
+        if not value:
+            return None
         for s in self.list_spools():
-            if str(s["_extra"].get(self.tag_field, "")) == tag_uid:
+            if str(s["_extra"].get(key, "")) == str(value):
                 return s
         return None
 
@@ -106,13 +111,20 @@ class SpoolmanClient:
         return r.json()
 
     # ---- writes -----------------------------------------------------------
-    def create_spool(self, filament_id: int, initial_weight: float, tag_uid: str = "") -> dict:
+    def create_spool(self, filament_id: int, initial_weight: float, tag_uid: str = "",
+                    extra: dict[str, Any] | None = None, remaining: float | None = None) -> dict:
         body: dict[str, Any] = {"filament_id": filament_id, "initial_weight": initial_weight}
+        merged = dict(extra or {})
         if tag_uid:
-            body["extra"] = _encode_extra({self.tag_field: tag_uid})
+            merged[self.tag_field] = tag_uid
+        if merged:
+            body["extra"] = _encode_extra(merged)
         r = self._http.post(f"{self.base}/api/v1/spool", json=body)
         r.raise_for_status()
-        return r.json()
+        spool = r.json()
+        if remaining is not None and remaining > 0 and abs(remaining - initial_weight) > 0.5:
+            self.set_remaining(spool["id"], remaining)
+        return spool
 
     def set_extra(self, spool_id: int, **values: Any) -> None:
         # merge with existing extra so we don't clobber other fields

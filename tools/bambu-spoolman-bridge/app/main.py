@@ -14,6 +14,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .cloud_library import (
+    CloudLibraryImporter,
+    api_host_for,
+    fetch_cloud_filaments,
+    load_from_file,
+    DEFAULT_ENDPOINT,
+)
 from .config import DEFAULT_DB_PATH, load_config
 from .consumption import ConsumptionEngine
 from .db import Database
@@ -56,6 +63,8 @@ class Bridge:
         )
         self.tags = TagService(self.db)
         self.jobs = JobTracker(self)
+        self.cloud_importer = CloudLibraryImporter(self.spoolman, self.db)
+        self.cloud_cfg = self.cfg.get("cloud_library", {})
         self.public_url = self.cfg.get("spoolman_public_url", sm.get("base_url", "")).rstrip("/")
         self.label_on_onboard = bool(lp.get("print_on_onboard", False))
 
@@ -293,6 +302,24 @@ class Bridge:
         log.warning("printer %s: no usable transport (need lan.host or bambu_account.token)", p.get("name"))
         return None
 
+    def run_cloud_import(self, source: str = "live", path: str = "", dry_run: bool = True) -> dict[str, Any]:
+        """Import the cloud filament library into Spoolman (concept §6).
+        source='file' reads a saved capture (path); source='live' calls the cloud REST."""
+        if source == "file":
+            if not path:
+                raise ValueError("source=file requires a path")
+            records = load_from_file(path)
+        else:
+            acct = self.cfg.get("bambu_account", {})
+            token = acct.get("token", "")
+            if not token:
+                raise ValueError("live import needs bambu_account.token")
+            host = api_host_for(acct.get("region", "eu"), self.cloud_cfg.get("api_host", ""))
+            endpoint = self.cloud_cfg.get("endpoint", DEFAULT_ENDPOINT)
+            records = fetch_cloud_filaments(host, endpoint, token, int(self.cloud_cfg.get("limit", 200)))
+        log.info("cloud import: %d records (source=%s, dry_run=%s)", len(records), source, dry_run)
+        return self.cloud_importer.import_records(records, dry_run=dry_run)
+
     @property
     def pending(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -324,6 +351,12 @@ class TagReq(BaseModel):
     tag_uid: str
 
 
+class CloudImportReq(BaseModel):
+    source: str = "live"      # live | file
+    path: str = ""
+    dry_run: bool = True
+
+
 # ---- routes --------------------------------------------------------------
 @app.get("/api/state")
 def api_state() -> dict[str, Any]:
@@ -351,6 +384,16 @@ def api_filaments() -> list[dict]:
 def api_bind(req: BindReq) -> dict[str, str]:
     bridge.bind(req.tag_uid, req.spool_id)
     return {"status": "ok"}
+
+
+@app.post("/api/cloud/import")
+def api_cloud_import(req: CloudImportReq) -> dict[str, Any]:
+    try:
+        return bridge.run_cloud_import(req.source, req.path, req.dry_run)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"cloud import failed: {e}")
 
 
 @app.post("/api/onboard_auto")

@@ -25,9 +25,24 @@ reconcile, **auto-create** of Spoolman vendor/filament/spool from tray metadata,
 subtractive in `per_job`), onboarding API + PWA (QR quick-bind, auto-create,
 Web NFC read/write), Label-Hub call, tag lifecycle (free / reassign with material
 compatibility guard), **cloud-MQTT fallback** (token auth, `transport: auto`
-prefers LAN via TCP reachability check). **TODO:** persist pending queue,
-cloud-library import, verify gcode_state/tray_now/cloud-username against a real
+prefers LAN via TCP reachability check), **cloud-library import** (Filament
+Manager → Spoolman, live REST or saved JSON capture, idempotent via RFID +
+cloud_id). **TODO:** persist pending queue, verify gcode_state/tray_now/
+cloud-username **and the cloud filament endpoint path** against a real
 printer/account.
+
+## Cloud library import
+
+Imports your Bambu Filament Manager library into Spoolman.
+
+```bash
+# Dry run first (the live endpoint path is a HYPOTHESIS — verify via capture):
+curl -X POST localhost:8099/api/cloud/import -H 'Content-Type: application/json' \
+  -d '{"source":"live","dry_run":true}'
+# Or test the mapping against a saved mitmproxy capture, no live call needed:
+curl -X POST localhost:8099/api/cloud/import -H 'Content-Type: application/json' \
+  -d '{"source":"file","path":"/data/capture.json","dry_run":false}'
+```
 
 ## Quick start
 

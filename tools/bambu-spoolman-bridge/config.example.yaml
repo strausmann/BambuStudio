@@ -45,3 +45,11 @@ label_printer:
   print_on_onboard: true
 
 spoolman_public_url: "http://spoolman:7912"   # used to build qr_payload (/spool/{id})
+
+cloud_library:                      # import Bambu Filament Manager library -> Spoolman (concept §6)
+  enabled: false
+  api_host: ""                      # empty -> derived from region (api.bambulab.com / .cn)
+  endpoint: "/v1/user-service/my/filament/v2"   # HYPOTHESIS — verify via capture (spec §1.2.1)
+  limit: 200
+  # Run: POST /api/cloud/import {"source":"live","dry_run":true}
+  #  or: POST /api/cloud/import {"source":"file","path":"/data/capture.json","dry_run":true}
