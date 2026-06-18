@@ -165,7 +165,8 @@ class Bridge:
             try:
                 home = self.db.mark_unloaded(spool_id)
                 self.spoolman.set_active_tray(spool_id, None)
-                # Restore the previous location (Hangar code), fall back to storage default.
+                # Restore whatever location the spool had before (any Spoolman location
+                # string, e.g. a Hangar code if Hangar is used), fall back to storage default.
                 self.spoolman.set_location(spool_id, home or self.storage_location)
             except Exception:  # noqa: BLE001
                 log.exception("clear slot/location failed for spool %s", spool_id)

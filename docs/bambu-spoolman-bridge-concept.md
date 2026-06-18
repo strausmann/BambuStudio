@@ -48,6 +48,9 @@ Die im „Neues Filament"-Dialog der Bambu-App sichtbare **`SN`** (z. B. `5D585F
 5. **Onboarding-Web-UI** — fragt bei unbekannter RFID die Spoolman-Zuordnung ab.
 6. **Spoolman-Client** — REST-Aufrufe (lesen/anlegen/Verbrauch buchen).
 
+> **Harte Abhängigkeiten: NUR Drucker (MQTT) + Spoolman.** Alles andere — Label-Printer-Hub,
+> Hangar, Cloud — ist **optional** und per Config abschaltbar. Die Bridge läuft eigenständig.
+
 ---
 
 ## 2. Datenquelle: MQTT-AMS-Telemetrie
@@ -293,19 +296,24 @@ Entladen (Slot leer / tag_uid wechselt)
 
 - **Vorheriger Lagerort wird wiederhergestellt:** Beim Einlegen merkt sich die Bridge den
   bisherigen `location` der Spule (`spool_home`-Tabelle, gesetzt nur beim Übergang ins AMS, nicht
-  bei jedem MQTT-Tick). Beim Entladen wird **genau dieser** Lagerort zurückgeschrieben — z. B. der
-  Hangar-Code „SMA-022-001". Nur wenn kein Home bekannt ist, greift `storage_location` als Default.
+  bei jedem MQTT-Tick). Beim Entladen wird **genau dieser** Lagerort-String zurückgeschrieben —
+  egal **was** dort stand (ein beliebiger Spoolman-`location`-Text, ein Code wie „SMA-022-001",
+  oder leer). Nur wenn kein Home bekannt ist, greift `storage_location` als Default.
 - Quelle der Slot-Belegung = `slot_state`-Tabelle (§7): Schlüssel `(device_serial, ams_id, tray_id)`.
 - So siehst du in Spoolman direkt, **welche Rolle in welchem (benannten) AMS-Slot** steckt — über
   beide AMS 2 Pro hinweg, mit echten Namen statt „AMS1/AMS2".
 - Optional zusätzlich Spoolman-Felder `first_used` / `last_used` pflegen.
 
-> **Hangar-Integration (`hangar.strausmann.cloud`):** Dein Resolver für Snipe-IT/Spoolman/Grocy
-> ist die **Lagerort-Autorität** (Codes wie `SMA-022-001`, „verschieben", Etiketten-Nachdruck).
-> Da die Bridge Spoolmans natives `location`-Feld pflegt, bleibt Hangar konsistent: während des
-> Drucks zeigt es den AMS-Slot, nach dem Entladen wieder den Hangar-Lagerort. **Empfehlung:**
-> Etikettendruck (§10) ggf. **Hangar überlassen** (Dublette vermeiden) und AMS-Slots optional als
-> eigene Hangar-Lagerorte registrieren, damit auch der „im Drucker"-Zustand ein echter Standort ist.
+> **Harte Abhängigkeiten: nur Drucker (MQTT) + Spoolman.** Die Bridge **funktioniert vollständig
+> ohne Hangar** (und ohne Label-Hub). Sie liest/schreibt ausschließlich Spoolmans natives
+> `location`-Feld als reinen Text — die Restore-Logik ist inhaltsagnostisch.
+>
+> **Optional, falls vorhanden — Hangar (`hangar.strausmann.cloud`):** Dein Resolver für
+> Snipe-IT/Spoolman/Grocy kann Spoolman als Lagerort-Autorität nutzen (Codes wie `SMA-022-001`,
+> „verschieben", Etiketten-Nachdruck). Da die Bridge Spoolmans `location`-Feld pflegt, bleibt eine
+> evtl. vorhandene Hangar-Sicht konsistent (im Druck = AMS-Slot, nach Entladen = vorheriger Ort).
+> Wer Hangar hat, **kann** den Etikettendruck dorthin auslegen (Dublette vermeiden) — wer nicht,
+> nutzt den eingebauten Label-Hook (§10) oder gar keinen. Kein Teil davon ist Pflicht.
 
 ### 5.2 Verbrauchsmanagement (Modus `combined`)
 

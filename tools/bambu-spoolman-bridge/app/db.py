@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS tag_history (
 );
 CREATE TABLE IF NOT EXISTS spool_home (
     spool_id      INTEGER PRIMARY KEY,
-    home_location TEXT,                  -- location to restore on unload (e.g. Hangar code)
+    home_location TEXT,                  -- any prior Spoolman location string to restore on unload
     is_loaded     INTEGER DEFAULT 0,
     updated_at    TEXT
 );

@@ -5,6 +5,11 @@ printers via **LAN MQTT** and syncs it to **Spoolman**, with an onboarding PWA
 (QR quick-bind + Web NFC for third-party tags) and an optional **Label-Printer-Hub**
 hook.
 
+> **Dependencies: only the printer (MQTT) + Spoolman.** The bridge is fully
+> self-contained and works **without Hangar** and **without the Label-Hub** — both
+> are optional. It only reads/writes Spoolman's native `location` field as plain
+> text, so any external viewer (e.g. Hangar) is purely additive.
+
 > Design rationale and decisions: [`docs/bambu-spoolman-bridge-concept.md`](../../docs/bambu-spoolman-bridge-concept.md)
 > Cloud-API analysis (optional enrichment): [`docs/filament-cloud-api-analysis-spec.md`](../../docs/filament-cloud-api-analysis-spec.md)
 
