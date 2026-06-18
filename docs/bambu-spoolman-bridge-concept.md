@@ -140,13 +140,23 @@ consumption:
 
 Spoolman: **Vendor → Filament → Spool**. Das passt 1:1:
 
-- Ein **Filament** = eine Sorte/Farbe, in deiner App z. B. „PLA Basic Grau **#60**".
-  Diese hast du bereits mit der **#Zahl** in Spoolman angelegt.
-- Eine **Spool** = eine **physische Rolle** = **eine RFID** (`tag_uid`).
-  (In der App sichtbar als „12 Rollen (9808 g)" unter einem Filament.)
+- Ein **Filament** = eine Sorte/Farbe (z. B. „PLA Basic Rot", „PLA Matte Blau").
+- Eine **Spool** = eine **physische Rolle** = **eine RFID** (`tag_uid`) = **eine eigene #Zahl**.
+
+→ **Die #Zahl ist pro physischer Spule, nicht pro Sorte** (bestätigt aus dem Filament Manager:
+unter „PLA Matte Blau" liegen einzeln **#65, #66, #67, #68, #69, #70**; unter „PLA Basic Rot"
+**#** und **#38**). Jede Rolle ist bereits einzeln in Spoolman angelegt — mit **eigener
+Spoolman-Spool-ID (#Zahl), eigenem Label und eigenem QR** — und ebenso einzeln im Bambu
+Filament Manager eingetragen. Die Gruppierung „N Rollen" in der App ist reine Sortier-Anzeige
+nach Sorte.
 
 → Die Bridge verwaltet **RFID → Spoolman-Spool-ID**. Die #Zahl ist der **menschliche** Anker
-beim Onboarding, die RFID der **maschinelle** Anker im Betrieb.
+pro Rolle, die RFID der **maschinelle** Anker im Betrieb.
+
+> **RFID-Badge-Beobachtung:** Im Filament Manager tragen nur bereits **im AMS gelesene**
+> Spulen das „RFID"-Badge (z. B. #77, #60). Manuell angelegte, aber noch nicht eingelegte
+> Spulen (z. B. #38, #65–#70) haben **noch keine RFID** → genau diese Verknüpfung
+> (`tag_uid` ↔ #Zahl/Spule) ist die Aufgabe des Bridge-Onboardings (§5.1).
 
 ### 4.1.1 Zwei Ebenen: Filament (Sorte) *und* Spool (Rolle) anlegen
 
@@ -168,11 +178,12 @@ Onboarding hat **zwei** Stufen — und die Bridge kann beide beschleunigen:
 
 ### 4.1.2 #Zahl-Konvention
 
-Du legst die Spoolman-ID aktuell **manuell als #Zahl in den Titel**. Die Bridge respektiert
-das und kann es automatisieren: beim Auto-Anlegen einer Sorte/Spule wird die Spoolman-ID
-(bzw. eine fortlaufende #Zahl) in `name`/`extra` gespiegelt, damit deine bestehende
-Benennungslogik erhalten bleibt. Maschinell ist die #Zahl dank RFID-Mapping aber **nicht mehr
-zwingend** — sie dient nur noch der menschlichen Lesbarkeit.
+Du legst aktuell **pro Spule manuell die #Zahl in den Titel** (= Spoolman-Spool-ID). Die
+Bridge respektiert das und kann es automatisieren: beim Auto-Anlegen einer **Spule** wird die
+Spoolman-Spool-ID (bzw. die nächste fortlaufende #Zahl) in `name`/`extra` gespiegelt, damit
+deine bestehende Benennungs- und Label-Logik erhalten bleibt. Maschinell ist die #Zahl dank
+RFID-Mapping aber **nicht mehr zwingend** — sie dient der menschlichen Lesbarkeit und als
+Aufdruck auf dem QR-Label.
 
 ### 4.2 RFID-Speicherung in Spoolman
 
