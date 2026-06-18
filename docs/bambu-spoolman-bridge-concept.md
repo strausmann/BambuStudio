@@ -148,6 +148,31 @@ Spoolman: **Vendor → Filament → Spool**. Das passt 1:1:
 → Die Bridge verwaltet **RFID → Spoolman-Spool-ID**. Die #Zahl ist der **menschliche** Anker
 beim Onboarding, die RFID der **maschinelle** Anker im Betrieb.
 
+### 4.1.1 Zwei Ebenen: Filament (Sorte) *und* Spool (Rolle) anlegen
+
+Onboarding hat **zwei** Stufen — und die Bridge kann beide beschleunigen:
+
+1. **Filament-Sorte fehlt in Spoolman?** → automatisch anlegen aus den Tray-Metadaten
+   (`filamentVendor`=„Bambu Lab", `tray_type`, `tray_color`, Name aus `tray_sub_brands` +
+   Farbname). So entsteht „PLA Basic Grau" in Spoolman, ohne dass du es manuell anlegst.
+2. **Physische Rolle (RFID) fehlt?** → Spool unter dieser Sorte anlegen (§4.1).
+
+> **SKU-/Karton-Scan (App):** Das Scannen des Bambu-Kartons (SKU/QR) ist eine **reine
+> Android-App-Funktion** — die SKU taucht **nicht** in der MQTT-Telemetrie oder im offenen
+> Code auf. Der **maschinelle Sorten-Anker der Bridge** ist daher `tray_info_idx`
+> (Preset-ID, z. B. `GFL99`) + Farbe, nicht die SKU. Der App-Scan bleibt aber nützlich: er
+> befüllt schnell **Bambus eigene** Bibliothek, die du dann per Cloud-REST-Import (§6) in
+> einem Rutsch nach Spoolman übernehmen kannst. Optional kann die Bridge eine eigene
+> **SKU→Attribute-Tabelle** pflegen, falls du SKUs manuell erfassen willst.
+
+### 4.1.2 #Zahl-Konvention
+
+Du legst die Spoolman-ID aktuell **manuell als #Zahl in den Titel**. Die Bridge respektiert
+das und kann es automatisieren: beim Auto-Anlegen einer Sorte/Spule wird die Spoolman-ID
+(bzw. eine fortlaufende #Zahl) in `name`/`extra` gespiegelt, damit deine bestehende
+Benennungslogik erhalten bleibt. Maschinell ist die #Zahl dank RFID-Mapping aber **nicht mehr
+zwingend** — sie dient nur noch der menschlichen Lesbarkeit.
+
 ### 4.2 RFID-Speicherung in Spoolman
 
 - Empfehlung: in Spoolman ein **Extra-Field** `bambu_rfid` (Typ Text) definieren
@@ -161,10 +186,12 @@ beim Onboarding, die RFID der **maschinelle** Anker im Betrieb.
 | Zweck | Methode/Pfad |
 |-------|--------------|
 | Filamente listen (#Zahl → filament_id) | `GET /api/v1/filament` |
+| **Sorte anlegen** (falls fehlt, §4.1.1 Stufe 1) | `POST /api/v1/filament` `{vendor_id/name, material, color_hex, name, weight}` |
 | Spule(n) suchen | `GET /api/v1/spool` (+ clientseitiger Filter auf `extra.bambu_rfid`) |
 | Spule anlegen | `POST /api/v1/spool` `{filament_id, initial_weight, extra:{bambu_rfid:"<UID>"}}` |
 | Restgewicht setzen (Reconcile) | `PUT /api/v1/spool/{id}` `{remaining_weight: <g>}` |
 | Verbrauch buchen (pro Job) | `PUT /api/v1/spool/{id}/use` `{use_weight: <g>}` |
+| **AMS-Slot pflegen** (§5.3) | `PUT /api/v1/spool/{id}` `{location: "<printer>/AMS<id>/Slot<n>"}` |
 
 ---
 
@@ -180,16 +207,37 @@ Spule eingelegt
               Web-UI/Notification:
               "Neue Spule <tag_uid> erkannt.
                Material=<tray_type>, Farbe=<tray_color>, Preset=<tray_info_idx>.
-               Welche Spoolman-Spule/#Zahl ist das?"
-                 ├▶ Nutzer wählt vorhandenes Filament (#Zahl)
+               Welche Spoolman-Sorte/#Zahl ist das?"
+                 ├▶ Sorte existiert → Nutzer wählt Filament (#Zahl)
                  │     └▶ POST /spool  (neue physische Rolle unter dem Filament)
                  │           └▶ Mapping speichern: tag_uid → spool_id
-                 └▶ (optional) Vorschlag automatisch: Match über tray_info_idx + Farbe
+                 ├▶ Sorte fehlt → "Neue Sorte aus Tray-Daten anlegen?" (§4.1.1 Stufe 1)
+                 │     └▶ POST /filament  → danach POST /spool
+                 └▶ (optional) Auto-Vorschlag: Match über tray_info_idx + Farbe
 ```
 
 - **Komfort:** Die Bridge kann anhand `tray_type` + `tray_color` + `tray_info_idx` einen
-  **Vorschlag** machen, welche #Zahl passt; der Nutzer bestätigt nur noch.
+  **Vorschlag** machen, welche #Zahl passt; der Nutzer bestätigt nur noch. Fehlt die Sorte
+  ganz, wird sie auf Wunsch direkt aus den Tray-Metadaten angelegt (§4.1.1).
 - Initialgewicht der neuen Spool: aus `tray_weight` (Soll) bzw. `remain% × tray_weight`.
+
+### 5.3 AMS-Slot-Pflege in Spoolman
+
+Spoolman hat pro Spool ein **`location`-Feld** — ideal, um den aktuellen AMS-Slot abzubilden:
+
+```
+Tray-Update (tag_uid bekannt)
+   └▶ location der Spool setzen: "<printer>/AMS<ams_id>/Slot<tray_id>"
+      └▶ alte Belegung desselben Slots (anderer tag_uid) → location dort leeren
+Entladen (Slot wird leer / tag_uid wechselt)
+   └▶ location der vorigen Spool leeren (oder auf "Lager" setzen) + Reconcile (§5.2)
+```
+
+- Quelle der Slot-Belegung = `slot_state`-Tabelle (§7): Schlüssel `(device_serial, ams_id, tray_id)`.
+- So siehst du in Spoolman direkt, **welche Rolle gerade in welchem AMS-Slot** steckt — über
+  beide AMS 2 Pro hinweg.
+- Optional zusätzlich Spoolman-Felder `first_used` (bei erstem Slot-Einsatz) / `last_used`
+  (bei jedem Verbrauchs-Event) pflegen.
 
 ### 5.2 Verbrauchsmanagement (Modus `combined`)
 
