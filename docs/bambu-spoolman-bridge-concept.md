@@ -374,25 +374,33 @@ genau der Grund, warum das **RE der Filament-Cloud-API** (Spec-Dokument) wertvol
 
 1. **Verknüpft Bambu eine neu erkannte RFID mit einer zuvor per Scan/Manuell angelegten Spule —
    oder fragt es danach?**
-   - **Indiz aus deinem Screenshot:** Unter „PLA Basic Rot" existieren **„#"** (mit RFID-Badge)
-     **und** **„#38"** (ohne RFID, manuell). Das deutet stark darauf hin, dass Bambu **nicht
-     fragt/merged**, sondern beim AMS-Read einen **separaten** Datensatz anlegt
-     (`createType=ams`) neben dem manuellen (`createType=manual`).
-   - **Konsequenz:** Genau diese **Dublette aufzulösen** (RFID-Record ↔ manueller #Zahl-Record)
-     ist eine Kernaufgabe **unserer** Bridge — Bambu macht es offenbar nicht.
+   - **Status: UNGETESTET.** (Korrektur einer früheren Fehlannahme.) Die Datensätze mit
+     RFID-Badge wurden **bereits vor** dem Setzen der #Zahl ins AMS eingelegt; die #Zahl hat der
+     Nutzer **nachträglich** durch Ablesen des physischen Spoolman-Labels ergänzt. Die rein
+     **manuell** per App angelegten #Zahl-Spulen (z. B. #38) wurden seitdem **noch nicht** ins
+     AMS eingelegt → das Zusammenführungs-/Abfrageverhalten ist **noch nicht beobachtet**.
+   - „PLA Basic Rot #" (RFID) **und** „#38" (manuell) sind **zwei verschiedene physische Rollen**
+     (2 Rollen = 2000 g), **keine** Dublette → daraus lässt sich **nichts** über Bambus
+     Merge-Logik ableiten.
+   - **Sauberer Test (auszuführen):** eine Spule, die **nur** als manueller #Zahl-Eintrag
+     existiert (RFID noch unbekannt), ins AMS einlegen und beobachten, ob Bambu (a) zum Verknüpfen
+     **auffordert**, (b) per Heuristik **automatisch zuordnet**, oder (c) einen **separaten**
+     `ams`-Record anlegt (Dublette).
+   - **Für unsere Bridge ist das Ergebnis unkritisch:** sie verknüpft `tag_uid` ohnehin selbst mit
+     der Spoolman-Spule (per QR-Schnellbind, §5.1) — unabhängig davon, was Bambu intern tut.
 
 2. **Wie „vergisst" der Filament Manager die #Zahl↔RFID-Zuweisung, wenn ein Tag (leer) neu
    verwendet wird?**
-   - Vermutlich über `update`/`delete` auf dem Cloud-Record (vgl. Spec §1.2: `PUT`/`DELETE`
-     `/my/filament/v2`). Bestätigung erfordert Capture/RE.
+   - Ebenfalls **ungetestet**; vermutlich über `update`/`delete` auf dem Cloud-Record (vgl.
+     Spec §1.2: `PUT`/`DELETE` `/my/filament/v2`). Bestätigung erfordert Capture/RE.
    - **Unsere Unabhängigkeit:** Die Bridge führt ihr **eigenes** `tag_registry`/Mapping (§7) —
      sie ist damit **nicht** davon abhängig, wie Bambu intern auf-/abräumt. Optional kann sie
      über die RE'd Endpoints Bambus Bibliothek **mitpflegen** (Record löschen/aktualisieren),
      ist aber nicht darauf angewiesen.
 
-> **Verifikationsauftrag** (für die Capture-/RE-Session, Spec-Dokument): Beim Einlegen einer
-> Spule, deren #Zahl bereits manuell angelegt wurde, beobachten, ob ein neuer `ams`-Record
-> entsteht und ob/wie der manuelle Record verändert wird; sowie das Verhalten bei Tag-Reuse.
+> **Verifikationsaufträge** (Capture-/RE-Session, Spec-Dokument):
+> (a) Nur-manuelle #Zahl-Spule ins AMS einlegen → Abfrage/Merge/Dublette beobachten und den
+> begleitenden Cloud-Request mitschneiden. (b) Verhalten bei Tag-Reuse (leerer/neu belegter Tag).
 
 ---
 
