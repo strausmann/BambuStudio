@@ -10,8 +10,9 @@ printers:
       access_code: "12345678"       # LAN access code from the printer screen
 
 bambu_account:
-  region: eu                        # eu/us -> global infra (api.bambulab.com)
-  token: ""                         # only needed for cloud fallback (TODO)
+  region: eu                        # eu/us -> global broker (us.mqtt.bambulab.com); cn -> cn.mqtt...
+  token: ""                         # access token (JWT) for cloud-MQTT fallback; empty = LAN only
+  username: ""                      # optional; auto-derived from the token if left empty
 
 spoolman:
   base_url: "http://spoolman:7912"

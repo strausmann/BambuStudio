@@ -67,32 +67,89 @@ def _to_float(v, default=0.0) -> float:
         return default
 
 
+def cloud_broker_host(region: str) -> str:
+    """EU/US/global share the global broker; CN is separate (concept §3.2)."""
+    return "cn.mqtt.bambulab.com" if (region or "").lower() == "cn" else "us.mqtt.bambulab.com"
+
+
+def jwt_username(token: str) -> str:
+    """Derive the cloud MQTT username from the access token's JWT payload.
+    Bambu uses a "u_<uid>"-style username carried in the token claims."""
+    import base64
+    import json as _json
+
+    try:
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)  # pad base64url
+        claims = _json.loads(base64.urlsafe_b64decode(payload_b64))
+    except Exception:  # noqa: BLE001
+        return ""
+    if claims.get("username"):
+        return str(claims["username"])
+    for k in ("uid", "sub", "userId"):
+        if claims.get(k):
+            return f"u_{claims[k]}"
+    return ""
+
+
+def tcp_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 class BambuPrinterMQTT:
+    """Transport-agnostic MQTT client. Use the for_lan()/for_cloud() factories.
+
+    LAN and cloud differ only in host/credentials/TLS; topics and message
+    parsing are identical (concept §3.1/§3.2).
+    """
+
     def __init__(
         self,
         serial: str,
         host: str,
-        access_code: str,
+        username: str,
+        password: str,
         on_tray: TrayHandler,
         on_status: StatusHandler | None = None,
         on_version: VersionHandler | None = None,
         port: int = 8883,
+        tls_insecure: bool = False,
+        label: str = "lan",
     ):
         self.serial = serial
         self.host = host
-        self.access_code = access_code
+        self.port = port
+        self.label = label
         self.on_tray = on_tray
         self.on_status = on_status
         self.on_version = on_version
-        self.port = port
-        self._client = mqtt.Client(client_id=f"bridge-{serial}")
-        self._client.username_pw_set("bblp", access_code)
-        # Printer uses a self-signed cert; accept it (LAN).
-        self._client.tls_set(cert_reqs=ssl.CERT_NONE)
-        self._client.tls_insecure_set(True)
+        self._client = mqtt.Client(client_id=f"bridge-{serial}-{label}")
+        self._client.username_pw_set(username, password)
+        if tls_insecure:
+            self._client.tls_set(cert_reqs=ssl.CERT_NONE)  # printer self-signed cert (LAN)
+            self._client.tls_insecure_set(True)
+        else:
+            self._client.tls_set()  # verify against system CAs (cloud)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
         self._thread: threading.Thread | None = None
+
+    # ---- factories --------------------------------------------------------
+    @classmethod
+    def for_lan(cls, serial: str, host: str, access_code: str, **kw):
+        return cls(serial, host, "bblp", access_code, tls_insecure=True, label="lan", **kw)
+
+    @classmethod
+    def for_cloud(cls, serial: str, region: str, token: str, username: str = "", **kw):
+        host = cloud_broker_host(region)
+        user = username or jwt_username(token)
+        return cls(serial, host, user, token, tls_insecure=False, label="cloud", **kw)
 
     @property
     def report_topic(self) -> str:

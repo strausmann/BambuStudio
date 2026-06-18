@@ -115,14 +115,20 @@ optional später als Spool-/Lager-Hinweis nutzbar.
 - Voraussetzung: Drucker im LAN erreichbar; „LAN Mode" bzw. lokaler Zugriff aktiv.
 - Vorteil: kein Token-Ablauf, keine Cloud-Abhängigkeit, niedrige Latenz.
 
-### 3.2 Cloud-MQTT (Fallback)
+### 3.2 Cloud-MQTT (Fallback) — implementiert
 
-- Broker: `us.mqtt.bambulab.com:8883` (Global/EU) bzw. `cn.mqtt.bambulab.com:8883` (China).
-- Auth über Account-Token (siehe `filament-cloud-api-analysis-spec.md` §1.5: `get_my_token`).
-- **EU-Konto:** gehört zur „Global"-Region → **`api.bambulab.com` / `us.mqtt.bambulab.com`**
-  (es gibt kein eigenes `.eu`). Region ggf. aus dem JWT-Payload bestätigen.
-- Nutzung nur, wenn LAN nicht verfügbar (Reconnect-Strategie: LAN bevorzugen, bei n
-  fehlgeschlagenen LAN-Verbindungen auf Cloud schwenken, regelmäßig LAN erneut probieren).
+- Broker: `us.mqtt.bambulab.com:8883` (Global/EU) bzw. `cn.mqtt.bambulab.com:8883` (China),
+  TLS gegen System-CAs (kein insecure wie bei LAN).
+- **Auth:** Username = `u_<uid>` (wird aus dem **JWT-Payload des Tokens** abgeleitet —
+  `username`-Claim, sonst `uid`/`sub`; manuell über `bambu_account.username` überschreibbar),
+  Passwort = **Access-Token** (JWT, vgl. `filament-cloud-api-analysis-spec.md` §1.5).
+- **EU-Konto:** „Global"-Region → `us.mqtt.bambulab.com` (kein eigenes `.eu`).
+- **Gleiche Topics + Parsing** wie LAN (`device/<serial>/report`, `pushall`, `get_version`).
+- **Transport-Auswahl (`transport: auto|lan|cloud`):** `auto` bevorzugt LAN, prüft aber per
+  TCP-Reachability (`<host>:8883`); ist LAN nicht erreichbar und ein Token vorhanden → Cloud.
+  `lan`/`cloud` erzwingen den jeweiligen Weg.
+- **Hinweis:** Token läuft ab (~3 Monate) → erneuern. Solange LAN verfügbar ist, bleibt es der
+  bevorzugte, abhängigkeitsärmste Weg.
 
 ### 3.3 Konfiguration (Beispiel `config.yaml`)
 

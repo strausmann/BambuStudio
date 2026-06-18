@@ -24,8 +24,10 @@ reconcile, **auto-create** of Spoolman vendor/filament/spool from tray metadata,
 **per-job consumption tracking** (remain%-delta; history-only in `combined`,
 subtractive in `per_job`), onboarding API + PWA (QR quick-bind, auto-create,
 Web NFC read/write), Label-Hub call, tag lifecycle (free / reassign with material
-compatibility guard). **TODO:** cloud-MQTT fallback, persist pending queue,
-cloud-library import, verify gcode_state/tray_now against a real printer.
+compatibility guard), **cloud-MQTT fallback** (token auth, `transport: auto`
+prefers LAN via TCP reachability check). **TODO:** persist pending queue,
+cloud-library import, verify gcode_state/tray_now/cloud-username against a real
+printer/account.
 
 ## Quick start
 

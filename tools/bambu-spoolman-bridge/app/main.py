@@ -20,7 +20,7 @@ from .db import Database
 from .jobs import JobTracker
 from .labels import LabelClient
 from .models import Tray, density_for, material_family
-from .mqtt_ingest import BambuPrinterMQTT
+from .mqtt_ingest import BambuPrinterMQTT, tcp_reachable
 from .spoolman import SpoolmanClient
 from .tags import TagService
 
@@ -260,18 +260,38 @@ class Bridge:
             log.exception("label print failed for spool %s", spool_id)
 
     def start(self) -> None:
+        acct = self.cfg.get("bambu_account", {})
+        region = acct.get("region", "eu")
+        token = acct.get("token", "")
+        cloud_user = acct.get("username", "")
         for p in self.cfg.get("printers", []):
-            lan = p.get("lan", {})
-            if not lan.get("host"):
-                log.warning("printer %s has no lan.host; cloud transport is TODO", p.get("name"))
+            client = self._make_client(p, region, token, cloud_user)
+            if client is None:
                 continue
-            client = BambuPrinterMQTT(
-                serial=p["serial"], host=lan["host"], access_code=lan.get("access_code", ""),
-                on_tray=self.on_tray, on_version=self.on_version, on_status=self.on_status,
-            )
             client.start()
             self._printers.append(client)
-            log.info("started MQTT for %s (%s)", p.get("name"), p["serial"])
+            log.info("started %s MQTT for %s (%s)", client.label, p.get("name"), p["serial"])
+
+    def _make_client(self, p: dict, region: str, token: str, cloud_user: str):
+        serial = p["serial"]
+        lan = p.get("lan", {})
+        transport = p.get("transport", "auto")
+        cb = dict(on_tray=self.on_tray, on_version=self.on_version, on_status=self.on_status)
+
+        want_lan = bool(lan.get("host")) and transport in ("auto", "lan")
+        # In auto, prefer LAN only if it's actually reachable; otherwise fall back to cloud.
+        if want_lan and transport == "auto" and not tcp_reachable(lan["host"], 8883):
+            log.warning("[%s] LAN %s unreachable; trying cloud fallback", serial, lan["host"])
+            want_lan = False
+
+        if want_lan:
+            return BambuPrinterMQTT.for_lan(serial, lan["host"], lan.get("access_code", ""), **cb)
+        if token and transport in ("auto", "cloud"):
+            return BambuPrinterMQTT.for_cloud(serial, region, token, username=cloud_user, **cb)
+        if transport == "lan" and lan.get("host"):
+            return BambuPrinterMQTT.for_lan(serial, lan["host"], lan.get("access_code", ""), **cb)
+        log.warning("printer %s: no usable transport (need lan.host or bambu_account.token)", p.get("name"))
+        return None
 
     @property
     def pending(self) -> list[dict[str, Any]]:
