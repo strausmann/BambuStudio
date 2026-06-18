@@ -7,15 +7,7 @@ override, see §5.5). Color is a warning, material is a hard rule.
 from __future__ import annotations
 
 from .db import Database
-
-
-def material_family(material: str) -> str:
-    """Normalize a material string to a coarse family for matching.
-    'PLA Basic', 'PLA Matte', 'PLA-S' -> 'PLA'; 'PETG-CF' -> 'PETG'."""
-    if not material:
-        return ""
-    head = material.upper().replace("_", "-").split("-")[0].split(" ")[0]
-    return head.strip()
+from .models import material_family
 
 
 def compatible(tag_material: str, spool_material: str) -> bool:

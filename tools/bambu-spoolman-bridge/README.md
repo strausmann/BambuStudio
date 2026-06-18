@@ -11,12 +11,16 @@ hook.
 ## Status
 
 Scaffold / work in progress. **Implemented:** LAN MQTT ingest + AMS tray parsing,
-SQLite state (spool map, slot state, tag registry, job log), Spoolman client with
-community extra fields (`tag` / `active_tray` / `filament_id`), remain% reconcile,
-onboarding API + PWA, Label-Hub call, tag lifecycle (free / reassign with material
-compatibility guard). **TODO:** cloud-MQTT fallback, per-job used-grams detection,
-auto-create Spoolman filament from tray metadata, persisting the pending queue,
-cloud-library import.
+AMS identity via `get_version` (type + serial → friendly location names), SQLite
+state (spool map, slot state, tag registry, job log, spool home), Spoolman client
+with community extra fields (`tag` / `active_tray` / `filament_id`), AMS slot →
+Spoolman native `location` with previous-location restore on unload, remain%
+reconcile, **auto-create** of Spoolman vendor/filament/spool from tray metadata,
+**per-job consumption tracking** (remain%-delta; history-only in `combined`,
+subtractive in `per_job`), onboarding API + PWA (QR quick-bind, auto-create,
+Web NFC read/write), Label-Hub call, tag lifecycle (free / reassign with material
+compatibility guard). **TODO:** cloud-MQTT fallback, persist pending queue,
+cloud-library import, verify gcode_state/tray_now against a real printer.
 
 ## Quick start
 

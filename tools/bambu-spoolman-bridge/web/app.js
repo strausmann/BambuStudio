@@ -35,10 +35,23 @@ async function refresh() {
     el.className = "card";
     el.innerHTML = `<div class="t">${colorDot(p.color)}${p.material} <small>(${p.setting_id})</small></div>
       <div class="s">Tag ${p.tag_uid} · ${p.slot} · remain ${p.remain}%</div>`;
+    const row = document.createElement("div");
+    row.className = "row";
     const btn = document.createElement("button");
-    btn.textContent = "Zuordnen";
+    btn.textContent = "Zuordnen (QR)";
     btn.onclick = () => openBind(p);
-    el.appendChild(btn);
+    const auto = document.createElement("button");
+    auto.className = "ghost";
+    auto.textContent = "Auto-anlegen";
+    auto.onclick = async () => {
+      try {
+        const r = await api("/api/onboard_auto", { method: "POST", body: JSON.stringify({ tag_uid: p.tag_uid }) });
+        alert("Spule #" + r.spool_id + " angelegt.");
+        refresh();
+      } catch (e) { alert("Auto-Anlage fehlgeschlagen: " + e.message); }
+    };
+    row.append(btn, auto);
+    el.appendChild(row);
     pend.appendChild(el);
   }
 

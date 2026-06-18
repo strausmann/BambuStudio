@@ -162,6 +162,7 @@ class BambuPrinterMQTT:
             colors=cols,
             remain=_to_int(t.get("remain"), -1),
             tray_weight=_to_float(t.get("tray_weight"), 0.0),
+            diameter=_to_float(t.get("tray_diameter"), 1.75),
             nozzle_temp_min=_to_int(t.get("nozzle_temp_min"), 0),
             nozzle_temp_max=_to_int(t.get("nozzle_temp_max"), 0),
         )

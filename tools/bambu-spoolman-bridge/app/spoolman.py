@@ -52,6 +52,11 @@ class SpoolmanClient:
         r.raise_for_status()
         return r.json()
 
+    def list_vendors(self) -> list[dict]:
+        r = self._http.get(f"{self.base}/api/v1/vendor")
+        r.raise_for_status()
+        return r.json()
+
     def find_spool_by_tag(self, tag_uid: str) -> dict | None:
         for s in self.list_spools():
             if str(s["_extra"].get(self.tag_field, "")) == tag_uid:
@@ -64,6 +69,41 @@ class SpoolmanClient:
         s = r.json()
         s["_extra"] = _decode_extra(s.get("extra"))
         return s
+
+    # ---- find-or-create (auto onboarding, concept §4.1.1) -----------------
+    def find_or_create_vendor(self, name: str) -> int | None:
+        if not name:
+            return None
+        for v in self.list_vendors():
+            if v.get("name", "").lower() == name.lower():
+                return v["id"]
+        r = self._http.post(f"{self.base}/api/v1/vendor", json={"name": name})
+        r.raise_for_status()
+        return r.json()["id"]
+
+    def find_filament(self, material: str, color_hex: str, vendor_id: int | None) -> dict | None:
+        ch = (color_hex or "").lstrip("#").lower()
+        for f in self.list_filaments():
+            if (f.get("material", "").upper() == material.upper()
+                    and (f.get("color_hex", "") or "").lstrip("#").lower() == ch
+                    and (vendor_id is None or (f.get("vendor") or {}).get("id") == vendor_id)):
+                return f
+        return None
+
+    def create_filament(self, name: str, material: str, color_hex: str, weight: float,
+                        diameter: float, density: float, vendor_id: int | None,
+                        extra: dict[str, Any] | None = None) -> dict:
+        body: dict[str, Any] = {
+            "name": name, "material": material, "density": density, "diameter": diameter,
+            "weight": weight, "color_hex": (color_hex or "").lstrip("#"),
+        }
+        if vendor_id is not None:
+            body["vendor_id"] = vendor_id
+        if extra:
+            body["extra"] = _encode_extra(extra)
+        r = self._http.post(f"{self.base}/api/v1/filament", json=body)
+        r.raise_for_status()
+        return r.json()
 
     # ---- writes -----------------------------------------------------------
     def create_spool(self, filament_id: int, initial_weight: float, tag_uid: str = "") -> dict:

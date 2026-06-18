@@ -48,14 +48,22 @@ class ConsumptionEngine:
             self.spoolman.set_remaining(spool_id, target_g)
 
     def book_job(self, spool_id: int, tag_uid: str, job_id: str, used_g: float) -> None:
-        """Per-job subtraction with idempotency. TODO: wire to real job events."""
-        if self.mode not in ("per_job", "combined"):
-            return
-        if self.db.job_booked(job_id):
+        """Record a job's consumption (idempotent per job_id).
+
+        - mode `per_job`: subtract via Spoolman /use (authoritative).
+        - mode `combined`/`remain`: the absolute remain%% reconcile already owns
+          the spool's remaining weight, so we only LOG the job for history here
+          (no /use) to avoid double-counting.
+        """
+        if used_g <= 0 or self.db.job_booked(job_id):
             return
         try:
-            self.spoolman.use_weight(spool_id, used_g)
             self.db.log_job(job_id, tag_uid, used_g)
-            log.info("booked job %s: -%.0fg on spool %s", job_id, used_g, spool_id)
+            if self.mode == "per_job":
+                self.spoolman.use_weight(spool_id, used_g)
+                log.info("booked job %s: -%.0fg on spool %s", job_id, used_g, spool_id)
+            else:
+                log.info("logged job %s: ~%.0fg on spool %s (remaining owned by reconcile)",
+                         job_id, used_g, spool_id)
         except Exception:  # noqa: BLE001
             log.exception("book_job failed for %s", job_id)

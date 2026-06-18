@@ -309,19 +309,24 @@ Entladen (Slot leer / tag_uid wechselt)
 
 ### 5.2 Verbrauchsmanagement (Modus `combined`)
 
-Kombiniert beide Strategien (du hast „beides" gewählt):
+**Wichtige Designentscheidung gegen Doppelzählung:** In `combined` ist der **absolute
+remain%-Reconcile die Quelle der Wahrheit** für das Spoolman-Restgewicht (Bambus `remain` ist
+für RFID-Spulen verlässlich und selbstkorrigierend — auch bei Fehldrucken). Der **Pro-Job-Teil
+zählt NICHT zusätzlich ab**, sondern dient der **Historie/Audit**.
 
-1. **Pro-Job-Abzug (primär, genau):**
-   - Druckstart erkennen (Statuswechsel auf RUNNING; aktiver Tray bekannt).
-   - Bei Job-Ende den real verbrauchten Gramm-Wert ermitteln
-     (aus Job-/Slicer-Schätzung bzw. Gewichtsdifferenz) und
-     `PUT /spool/{id}/use {use_weight}` buchen.
-2. **remain%-Reconcile (Abgleich, robust):**
-   - Bei jedem stabilen `remain`-Update bzw. beim Entladen:
-     `remaining_weight = remain% × tray_weight` mit Spoolman abgleichen.
-   - Dient als Drift-Korrektur, falls ein Job-Event verpasst wurde.
-- **Konfliktregel:** Pro-Job ist führend; Reconcile korrigiert nur, wenn die Abweichung
-  eine Schwelle überschreitet (z. B. >3 %), um „Zappeln" zu vermeiden.
+1. **remain%-Reconcile (Restgewicht-Autorität):**
+   - Bei jedem stabilen `remain`-Update / beim Entladen:
+     `remaining_weight = remain% × tray_weight` → Spoolman (`PUT /spool/{id}`).
+   - Nur schreiben, wenn die Abweichung `reconcile_threshold_pct` (z. B. 3 %) überschreitet
+     (verhindert „Zappeln").
+2. **Pro-Job-Tracking (Historie, via `remain`-Differenz):**
+   - Druckstart (`gcode_state` → `RUNNING`) erkennen, aktiven Tray (`ams.tray_now`) + dessen
+     Rest-Gramm merken; bei Job-Ende (`FINISH`/`FAILED`/`IDLE`) `verbraucht = vorher − nachher`.
+   - In `combined`/`remain`: nur in `job_log` schreiben (kein `/use`).
+   - In **`per_job`** (ohne Reconcile): `PUT /spool/{id}/use {use_weight}` bucht den Verbrauch.
+   - Idempotent über `job_id` (`subtask_id`/`task_id`).
+- **Annahmen** (gegen echten Drucker zu verifizieren): `gcode_state`-Werte, `ams.tray_now`
+  als globaler Index `ams_id*4 + slot` (255/254 = extern/keiner).
 
 ### 5.4 RFID-Tag-Lebenszyklus & Wiederverwendung
 

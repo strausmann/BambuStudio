@@ -17,8 +17,9 @@ from pydantic import BaseModel
 from .config import DEFAULT_DB_PATH, load_config
 from .consumption import ConsumptionEngine
 from .db import Database
+from .jobs import JobTracker
 from .labels import LabelClient
-from .models import Tray
+from .models import Tray, density_for, material_family
 from .mqtt_ingest import BambuPrinterMQTT
 from .spoolman import SpoolmanClient
 from .tags import TagService
@@ -54,8 +55,16 @@ class Bridge:
             reconcile_threshold_pct=float(cons.get("reconcile_threshold_pct", 3)),
         )
         self.tags = TagService(self.db)
+        self.jobs = JobTracker(self)
         self.public_url = self.cfg.get("spoolman_public_url", sm.get("base_url", "")).rstrip("/")
         self.label_on_onboard = bool(lp.get("print_on_onboard", False))
+
+        onb = self.cfg.get("onboard", {})
+        self.auto_create = bool(onb.get("auto_create", False))   # auto-create sort+spool on unknown tag
+        self.default_vendor = onb.get("default_vendor", "Bambu Lab")
+
+        # live view of trays seen via MQTT, used by the job tracker
+        self.live_trays: dict[tuple[str, int, int], Tray] = {}
 
         ams_cfg = self.cfg.get("ams", {})
         # alias map keyed by AMS serial number, e.g. {"AMSSN1234": "Werkstatt-links"}
@@ -71,8 +80,16 @@ class Bridge:
         self._printers: list[BambuPrinterMQTT] = []
 
     # ---- MQTT handler -----------------------------------------------------
+    def on_status(self, serial: str, print_obj: dict) -> None:
+        try:
+            self.jobs.on_status(serial, print_obj)
+        except Exception:  # noqa: BLE001
+            log.exception("on_status failed (%s)", serial)
+
     def on_tray(self, tray: Tray) -> None:
         try:
+            if tray.has_rfid:
+                self.live_trays[(tray.printer_serial, tray.ams_id, tray.tray_id)] = tray
             self._handle_tray(tray)
         except Exception:  # noqa: BLE001
             log.exception("on_tray failed (%s ams%s tray%s)", tray.printer_serial, tray.ams_id, tray.tray_id)
@@ -117,6 +134,12 @@ class Bridge:
 
         spool_id = self.db.get_spool_by_tag(tray.tag_uid)
         if spool_id is None:
+            if self.auto_create:
+                try:
+                    self.auto_create_from_tray(tray)
+                    return
+                except Exception:  # noqa: BLE001
+                    log.exception("auto-create failed for %s", tray.tag_uid)
             with self._lock:
                 self._pending[tray.tag_uid] = self._tray_snapshot(tray)
             log.info("unknown tag %s -> onboarding pending", tray.tag_uid)
@@ -159,6 +182,58 @@ class Bridge:
             "tray_weight": tray.tray_weight,
         }
 
+    # ---- auto-create (concept §4.1.1) ------------------------------------
+    def auto_create_by_tag(self, tag_uid: str) -> int:
+        """API entry: locate the (live or pending) tray for a tag and auto-create."""
+        tray = None
+        for (_s, _a, _t), t in self.live_trays.items():
+            if t.tag_uid == tag_uid:
+                tray = t
+                break
+        if tray is None:
+            with self._lock:
+                snap = self._pending.get(tag_uid)
+            if not snap:
+                raise KeyError(tag_uid)
+            tray = Tray(
+                printer_serial="", ams_id=-1, tray_id=-1, tag_uid=tag_uid,
+                setting_id=snap.get("setting_id", ""), material=snap.get("material", ""),
+                color=snap.get("color", ""), tray_weight=float(snap.get("tray_weight", 0) or 0),
+            )
+        return self.auto_create_from_tray(tray)
+
+    def auto_create_from_tray(self, tray: Tray) -> int:
+        """Find-or-create the Spoolman filament (sort) from tray metadata, then
+        create a spool for this physical roll and bind the tag. Returns spool_id."""
+        material = material_family(tray.material) or tray.material or "PLA"
+        vendor_id = self.spoolman.find_or_create_vendor(self.default_vendor)
+        fil = self.spoolman.find_filament(material, tray.color, vendor_id)
+        if fil is None:
+            variant = tray.material if tray.material and tray.material != material else ""
+            name = " ".join(p for p in [self.default_vendor, variant or material] if p).strip()
+            fil = self.spoolman.create_filament(
+                name=name, material=material, color_hex=tray.color,
+                weight=tray.tray_weight or 1000.0, diameter=tray.diameter or 1.75,
+                density=density_for(tray.material), vendor_id=vendor_id,
+                extra={"filament_id": tray.setting_id, "type": tray.material} if tray.setting_id else None,
+            )
+            log.info("auto-created filament '%s' (%s)", name, fil.get("id"))
+        spool = self.spoolman.create_spool(
+            filament_id=fil["id"],
+            initial_weight=tray.tray_weight or 1000.0,
+            tag_uid=tray.tag_uid,
+        )
+        spool_id = spool["id"]
+        self.db.bind_tag(tray.tag_uid, spool_id, hint="auto")
+        self.db.upsert_tag(tray.tag_uid, state="bambu_original", current_spool=spool_id)
+        self.db.add_history(tray.tag_uid, spool_id, "assign", note="auto-create")
+        with self._lock:
+            self._pending.pop(tray.tag_uid, None)
+        if self.label_on_onboard:
+            self._maybe_print_label(spool_id)
+        log.info("auto-created spool #%s for tag %s", spool_id, tray.tag_uid)
+        return spool_id
+
     # ---- actions used by the API -----------------------------------------
     def bind(self, tag_uid: str, spool_id: int) -> None:
         self.db.bind_tag(tag_uid, spool_id, hint="bind")
@@ -191,7 +266,7 @@ class Bridge:
                 continue
             client = BambuPrinterMQTT(
                 serial=p["serial"], host=lan["host"], access_code=lan.get("access_code", ""),
-                on_tray=self.on_tray, on_version=self.on_version,
+                on_tray=self.on_tray, on_version=self.on_version, on_status=self.on_status,
             )
             client.start()
             self._printers.append(client)
@@ -255,6 +330,15 @@ def api_filaments() -> list[dict]:
 def api_bind(req: BindReq) -> dict[str, str]:
     bridge.bind(req.tag_uid, req.spool_id)
     return {"status": "ok"}
+
+
+@app.post("/api/onboard_auto")
+def api_onboard_auto(req: TagReq) -> dict[str, Any]:
+    try:
+        spool_id = bridge.auto_create_by_tag(req.tag_uid)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="unknown tag (no live/pending tray)")
+    return {"status": "ok", "spool_id": spool_id}
 
 
 @app.post("/api/free")

@@ -28,6 +28,25 @@ def fit_bambu_name(name: str, max_len: int = BAMBU_FILAMENT_NAME_MAXLEN) -> str:
     return f"{base[:keep].rstrip()} {tag}"
 
 
+# Rough densities (g/cm^3) for auto-creating Spoolman filaments; Bambu does not
+# report density via MQTT. Fallback 1.24 (PLA-ish).
+DENSITY_BY_MATERIAL = {
+    "PLA": 1.24, "PETG": 1.27, "PET": 1.27, "ABS": 1.04, "ASA": 1.07,
+    "TPU": 1.21, "PC": 1.20, "PA": 1.15, "PVA": 1.23, "HIPS": 1.04, "PPS": 1.35,
+}
+
+
+def material_family(material: str) -> str:
+    """'PLA Basic'/'PLA-S'/'PLA Matte' -> 'PLA'; 'PETG-CF' -> 'PETG'."""
+    if not material:
+        return ""
+    return material.upper().replace("_", "-").split("-")[0].split(" ")[0].strip()
+
+
+def density_for(material: str) -> float:
+    return DENSITY_BY_MATERIAL.get(material_family(material), 1.24)
+
+
 def is_valid_tag_uid(tag_uid: str | None) -> bool:
     """Mirror BambuStudio's FilamentSpool::is_valid_tag_uid: non-empty and not
     all zeros. Non-RFID / empty trays report "0" or a zero string."""
@@ -53,6 +72,7 @@ class Tray:
     colors: list[str] = field(default_factory=list)
     remain: int = -1           # remaining percent (0-100), -1 = unknown
     tray_weight: float = 0.0   # nominal full weight (g)
+    diameter: float = 1.75
     nozzle_temp_min: int = 0
     nozzle_temp_max: int = 0
 

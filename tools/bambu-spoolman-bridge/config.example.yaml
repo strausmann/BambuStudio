@@ -23,6 +23,11 @@ consumption:
   mode: combined                    # per_job | remain | combined
   reconcile_threshold_pct: 3        # only correct remaining when drift exceeds this
 
+onboard:
+  auto_create: false                # true = auto-create Spoolman sort+spool for unknown tags
+                                    # false = queue them for manual QR-bind / "Auto-anlegen" button
+  default_vendor: "Bambu Lab"       # vendor used when auto-creating a filament sort
+
 ams:
   override_settings: false          # needs Developer Mode -> keep false (concept §5.5)
   # Friendly Spoolman location names per AMS serial (learned via get_version).
