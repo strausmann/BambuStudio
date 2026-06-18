@@ -81,7 +81,7 @@ Claude soll die per Capture beobachteten Felder hiergegen abgleichen und Lücken
 | `RFID`                 | string         | RFID-Tag-UID                        | nur gesetzt bei gültiger UID |
 | `filamentVendor`       | string         | Marke / `brand`                     | |
 | `filamentType`         | string         | Material / `material_type`          | z. B. PLA, PETG |
-| `filamentName`         | string         | Anzeigename / `series`              | required; Fallback = filamentType |
+| `filamentName`         | string         | Anzeigename / `series`              | required; Fallback = filamentType; **max. 30 Zeichen** (UI-Limit, per Capture verifizieren) |
 | `filamentId`           | string         | Bambu Preset/Setting-ID / `setting_id` | z. B. „GFL99" |
 | `isSupport`            | bool           | Support-Material?                   | aus filamentId abgeleitet |
 | `color`                | string (hex)   | Primärfarbe / `color_code`          | |

@@ -188,6 +188,12 @@ deine bestehende Benennungs- und Label-Logik erhalten bleibt. Maschinell ist die
 RFID-Mapping aber **nicht mehr zwingend** — sie dient der menschlichen Lesbarkeit und als
 Aufdruck auf dem QR-Label.
 
+> **Längenlimit Bambu Filament Manager: max. 30 Zeichen** für das Feld „Filamentname"
+> (cloud `filamentName`, beobachtet im UI — erklärt Kürzungen wie „PLA Basic **Sunflow** Yellow").
+> Spoolman selbst hat dieses Limit **nicht**. Wenn wir Namen **inkl. #Zahl** erzeugen, die auch
+> in Bambus Filament Manager passen sollen (oder beim Cloud-Import, §6), muss die Bridge auf
+> **≤ 30 Zeichen kürzen** (z. B. Sorte abkürzen, #Zahl immer erhalten: `…Yellow #32`).
+
 ### 4.2 RFID-Speicherung in Spoolman — Community-Konvention (Interop!)
 
 Damit **BambuSpoolPal** (Android) und **OpenSpoolMan** parallel/austauschbar nutzbar sind,
