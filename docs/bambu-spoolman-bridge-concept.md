@@ -283,18 +283,29 @@ in **zwei** Feldern gepflegt:
 - **`active_tray`** (Extra-Field, Community-Konvention §4.2) → Kompatibilität mit OpenSpoolMan.
 
 ```
-Tray-Update (tag_uid bekannt)
+Einlegen (tag_uid bekannt, Slot vorher anders belegt)
+   └▶ HOME merken: aktuellen Spoolman-`location` speichern (spool_home, §7)  ← z.B. Hangar-Code "SMA-022-001"
    └▶ location + active_tray setzen: "Werkstatt-links/Slot2"  (Alias o. "AMS 2 Pro (1234)/Slot2")
-      └▶ alte Belegung desselben Slots (anderer tag_uid) → dort location → "Lager", active_tray leeren
 Entladen (Slot leer / tag_uid wechselt)
-   └▶ vorige Spool: location → config.ams.storage_location ("Lager"), active_tray leeren + Reconcile (§5.2)
+   └▶ vorige Spool: location → **gemerkter HOME-Lagerort** (Fallback config.ams.storage_location),
+      active_tray leeren + Reconcile (§5.2)
 ```
 
+- **Vorheriger Lagerort wird wiederhergestellt:** Beim Einlegen merkt sich die Bridge den
+  bisherigen `location` der Spule (`spool_home`-Tabelle, gesetzt nur beim Übergang ins AMS, nicht
+  bei jedem MQTT-Tick). Beim Entladen wird **genau dieser** Lagerort zurückgeschrieben — z. B. der
+  Hangar-Code „SMA-022-001". Nur wenn kein Home bekannt ist, greift `storage_location` als Default.
 - Quelle der Slot-Belegung = `slot_state`-Tabelle (§7): Schlüssel `(device_serial, ams_id, tray_id)`.
 - So siehst du in Spoolman direkt, **welche Rolle in welchem (benannten) AMS-Slot** steckt — über
   beide AMS 2 Pro hinweg, mit echten Namen statt „AMS1/AMS2".
-- Beim Entladen wandert die Rolle als Lagerort zurück auf `storage_location` (Default „Lager").
 - Optional zusätzlich Spoolman-Felder `first_used` / `last_used` pflegen.
+
+> **Hangar-Integration (`hangar.strausmann.cloud`):** Dein Resolver für Snipe-IT/Spoolman/Grocy
+> ist die **Lagerort-Autorität** (Codes wie `SMA-022-001`, „verschieben", Etiketten-Nachdruck).
+> Da die Bridge Spoolmans natives `location`-Feld pflegt, bleibt Hangar konsistent: während des
+> Drucks zeigt es den AMS-Slot, nach dem Entladen wieder den Hangar-Lagerort. **Empfehlung:**
+> Etikettendruck (§10) ggf. **Hangar überlassen** (Dublette vermeiden) und AMS-Slots optional als
+> eigene Hangar-Lagerorte registrieren, damit auch der „im Drucker"-Zustand ein echter Standort ist.
 
 ### 5.2 Verbrauchsmanagement (Modus `combined`)
 
@@ -540,6 +551,17 @@ Die Bridge unterscheidet zwei Tag-Klassen (`tag_class` in `tag_registry`, §7):
 |--------|----------|-------------------|------------------|
 | `bambu_readonly` | Original-Bambu-Tag | nur **lesen** (AMS→MQTT; native App) | nur auf **material-/farbgleiche** Spule (§5.4) |
 | `custom_ndef` | OpenSpool-/OpenTag (NTAG215/216) | **lesen + schreiben** (PWA Web NFC, ESP32) | frei **überschreibbar** — z. B. „Overture PLA Gelb" → „Sunlu PETG White" |
+
+**Eindeutige ID vs. nur Metadaten (wichtig!):**
+- Der **OpenSpool-NDEF-Standard enthält nur Metadaten** (`type, color_hex, brand, min_temp,
+  max_temp`) — **keine eindeutige Spool-ID**. Er identifiziert also die *Sorte*, nicht die
+  *einzelne Rolle*.
+- NTAG-Chips haben zwar eine **Hardware-UID**, aber **Web NFC (PWA) liefert sie nicht** (nur
+  NDEF) — **nur das ESP32 (PN532)** kann die UID lesen. Sie taugt daher nicht als gemeinsamer
+  Schlüssel für PWA **und** ESP32.
+- **Lösung:** Wir betten eine **eigene `spoolman_id`** (und optional eine `uid`) **in den
+  NDEF-Inhalt** ein. Diese lesen PWA **und** ESP32 gleichermaßen → eindeutige Pro-Rollen-Bindung
+  unabhängig von der Hardware-UID. (In der PWA bereits im Schreib-Payload enthalten.)
 
 **ESP32 (OpenSpool-Gerät) als Lese-/Schreibstation:**
 - Gedacht zum **Scannen/Beschreiben von Dritthersteller- & Custom-Tags** neben dem Drucker.

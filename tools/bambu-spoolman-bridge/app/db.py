@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS tag_history (
     tag_uid TEXT, spoolman_id INTEGER,
     action TEXT, note TEXT, at TEXT
 );
+CREATE TABLE IF NOT EXISTS spool_home (
+    spool_id      INTEGER PRIMARY KEY,
+    home_location TEXT,                  -- location to restore on unload (e.g. Hangar code)
+    is_loaded     INTEGER DEFAULT 0,
+    updated_at    TEXT
+);
 """
 
 
@@ -152,6 +158,39 @@ class Database:
                 (tag_uid, spoolman_id, action, note, _now()),
             )
             self._conn.commit()
+
+    # ---- spool_home (previous/home location, concept §5.3) ----------------
+    def mark_loaded(self, spool_id: int, home_location: str) -> None:
+        """Record the spool's home location the first time it enters an AMS.
+        No-op if already loaded (so we don't overwrite the home with the slot)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT is_loaded FROM spool_home WHERE spool_id=?", (spool_id,)
+            ).fetchone()
+            if row and row["is_loaded"]:
+                return
+            self._conn.execute(
+                """INSERT INTO spool_home(spool_id, home_location, is_loaded, updated_at)
+                   VALUES(?,?,1,?)
+                   ON CONFLICT(spool_id) DO UPDATE SET home_location=excluded.home_location,
+                       is_loaded=1, updated_at=excluded.updated_at""",
+                (spool_id, home_location, _now()),
+            )
+            self._conn.commit()
+
+    def mark_unloaded(self, spool_id: int) -> str | None:
+        """Clear the loaded flag and return the stored home location."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT home_location FROM spool_home WHERE spool_id=?", (spool_id,)
+            ).fetchone()
+            home = row["home_location"] if row else None
+            self._conn.execute(
+                "UPDATE spool_home SET is_loaded=0, updated_at=? WHERE spool_id=?",
+                (_now(), spool_id),
+            )
+            self._conn.commit()
+        return home
 
     # ---- job_log ----------------------------------------------------------
     def job_booked(self, job_id: str) -> bool:

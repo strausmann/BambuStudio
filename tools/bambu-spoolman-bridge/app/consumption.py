@@ -23,18 +23,20 @@ class ConsumptionEngine:
         self.mode = mode
         self.threshold = reconcile_threshold_pct
 
-    def reconcile_remaining(self, spool_id: int, tray: Tray) -> None:
-        """Mirror Bambu's remain%% onto Spoolman when drift exceeds threshold."""
+    def reconcile_remaining(self, spool_id: int, tray: Tray, spool: dict | None = None) -> None:
+        """Mirror Bambu's remain%% onto Spoolman when drift exceeds threshold.
+        Pass an already-fetched `spool` to avoid a redundant GET."""
         if self.mode not in ("remain", "combined"):
             return
         target_g = tray.remaining_grams()
         if target_g is None:
             return
-        try:
-            spool = self.spoolman.get_spool(spool_id)
-        except Exception:  # noqa: BLE001
-            log.exception("reconcile: failed to read spool %s", spool_id)
-            return
+        if spool is None:
+            try:
+                spool = self.spoolman.get_spool(spool_id)
+            except Exception:  # noqa: BLE001
+                log.exception("reconcile: failed to read spool %s", spool_id)
+                return
         current = spool.get("remaining_weight")
         full = spool.get("filament", {}).get("weight") or tray.tray_weight or 0
         if full <= 0:

@@ -124,19 +124,26 @@ class Bridge:
 
         self.db.touch_tag(tray.tag_uid)
         slot = self._slot_str(tray)
+        spool = None
         try:
+            spool = self.spoolman.get_spool(spool_id)
+            # Remember where the spool lived before entering the AMS, so we can
+            # restore that exact location on unload (concept §5.3).
+            self.db.mark_loaded(spool_id, spool.get("location") or "")
             self.spoolman.set_active_tray(spool_id, slot)          # OpenSpoolMan-compat extra
             self.spoolman.set_location(spool_id, slot)             # Spoolman native location (Lagerort)
         except Exception:  # noqa: BLE001
             log.exception("set location failed for spool %s", spool_id)
-        self.consumption.reconcile_remaining(spool_id, tray)
+        self.consumption.reconcile_remaining(spool_id, tray, spool=spool)
 
     def _clear_slot_for_tag(self, tag_uid: str) -> None:
         spool_id = self.db.get_spool_by_tag(tag_uid)
         if spool_id is not None:
             try:
+                home = self.db.mark_unloaded(spool_id)
                 self.spoolman.set_active_tray(spool_id, None)
-                self.spoolman.set_location(spool_id, self.storage_location)  # back to storage
+                # Restore the previous location (Hangar code), fall back to storage default.
+                self.spoolman.set_location(spool_id, home or self.storage_location)
             except Exception:  # noqa: BLE001
                 log.exception("clear slot/location failed for spool %s", spool_id)
 
