@@ -309,12 +309,87 @@ CREATE TABLE job_log (                  -- Verbrauchsbuchungen (Idempotenz)
 
 ---
 
-## 9. Referenzen
+## 9. NFC-Strategie: Bambu- vs. Dritthersteller-Spulen (inkl. PWA-Grenzen)
+
+Entscheidende technische Klärung, weil sie den Onboarding-Weg bestimmt:
+
+- **Bambus RFID = verschlüsselte Mifare Classic.**
+- **Web NFC (PWA, Chrome/Edge/Opera/Samsung Internet auf Android) ist NDEF-only** — kann
+  Low-Level-Protokolle (ISO-DEP/NFC-A) und damit **Mifare Classic NICHT** lesen/schreiben.
+  → **Eine PWA kann Bambus eigene RFID-Tags NICHT auslesen.** Web NFC kann aber **NDEF-Tags
+  (OpenSpool/OpenTag) lesen und schreiben.**
+
+Daraus folgt die Aufteilung:
+
+| Fall | Identifikation | Tooling |
+|------|----------------|---------|
+| **Bambu-Spule im AMS** | `tag_uid` kommt **per MQTT** vom AMS | **kein Handy/NFC nötig** — Kernweg der Bridge |
+| **Bambu-Spule vor dem AMS** (Karton-/Erst-Onboarding) | verschlüsselte Mifare → **native App** | **BambuSpoolPal** (Android) oder USB-Reader — **PWA geht hier nicht** |
+| **Dritthersteller-Spule** | eigener **NDEF**-Tag | **PWA (Web NFC) kann OpenSpool-Tags schreiben** ✅ — oder manuelle Zuordnung im UI |
+
+### 9.1 Was BambuSpoolPal genau macht
+
+Native Android-App: scannt offizielle **Bambu-RFID-Tags** per NFC und extrahiert
+**Identifier, Dichte, Anfangsgewicht, Länge, Farbe** → matcht gegen die Spoolman-Filament-DB
+und legt/aktualisiert **Spool-Datensätze in Spoolman** an. Voraussetzungen: NFC-Android-Gerät,
+Spoolman-Instanz, HTTPS. Hinweis: mind. ~2 s pro Scan, sonst Lesefehler. Optional KI-basierte
+Gewichtserkennung per Kamera. → Ideal für **dein Karton-/Erst-Onboarding** per Handy.
+
+### 9.2 Rolle der PWA in unserem Projekt
+
+- **Onboarding-/Bedien-UI** der Bridge als **PWA** (mobil bedienbar, „neue Spule zuordnen").
+- **Web NFC nur für Dritthersteller**: in der PWA „Tag schreiben" → OpenSpool-NDEF-JSON
+  (`protocol`, `version`, `type`, `color_hex`, `brand`, `min_temp`, `max_temp`) auf NTAG-215/216
+  schreiben, Spoolman-ID/#Zahl mit einbetten.
+- **Bambu-Tag-Lesen** bleibt **MQTT (im AMS)** bzw. **native App (vor dem AMS)** — nicht PWA.
+
+---
+
+## 10. Etikettendruck-Integration (Printer Hub / Brother)
+
+Onboarding-Hook: sobald eine Spool angelegt/zugeordnet ist, ruft die Bridge dein
+**Printer-Hub-Projekt** auf, um auf dem **Brother-Etikettendrucker** ein Label zu drucken.
+
+- **Trigger:** nach `POST /spool` (neue Rolle) bzw. auf Knopfdruck in der PWA.
+- **Label-Inhalt (Vorschlag):** **#Zahl**, Material + Farbe, ggf. RFID-`tag_uid`, und ein
+  **QR-Code** auf die Spoolman-Spool-URL (`/spool/{id}`) für schnelles Wiederfinden/Scannen.
+- **Anbindung:** generischer **Webhook/REST-Call** an die Printer-Hub-API (konfigurierbar in
+  `config.yaml`, z. B. `label_printer.webhook_url` + Template-Feldmapping).
+- **Offen:** API/Endpoint deines Printer-Hub-Projekts — Repo/Schnittstelle bitte nennen, dann
+  wird der konkrete Call hier spezifiziert.
+
+---
+
+## 11. Build-vs-Adopt & Upstream-Strategie
+
+`drndos/openspoolman` deckt den Kern bereits ab → **nicht bei null starten, sondern forken/erweitern.**
+
+| Schwäche von OpenSpoolMan | Unser Beitrag |
+|---|---|
+| „Untested with multiple AMS units" | **Multi-AMS** (2× AMS 2 Pro) über Slot-Schlüssel `(device_serial, ams_id, tray_id)` |
+| Voller Gewichtsabzug bei Druckstart (auch bei Fehldruck) | **`combined`-Verbrauch** mit `remain%`-Reconcile (§5.2) |
+| LAN-only | **Cloud-MQTT-Fallback** (§3.2) |
+| Match nur über `tray_type` | **Zwei-Ebenen-Onboarding** + Filament-Auto-Create (§4.1.1) |
+| — | **Etikettendruck-Hook** (§10), **PWA-Dritthersteller-Tags** (§9.2) |
+
+**Vorgehen (Upstream-first):**
+1. **Lizenz prüfen** von `drndos/openspoolman` (bestimmt, ob/wie wir forken & beitragen dürfen).
+2. Auf eigenem **Fork** entwickeln, Features klein & abgegrenzt halten.
+3. Pro Feature **Upstream-PR** anbieten (Multi-AMS, Reconcile, Cloud-Fallback).
+4. Wird es angenommen → Upstream nutzen; sonst **Fork pflegen** (Rebase-fähig halten).
+
+---
+
+## 12. Referenzen
 
 - Schwester-Spec (Cloud-REST/Endpoints): `docs/filament-cloud-api-analysis-spec.md`
 - AMS-Tray-Felder im Quellcode: `src/slic3r/GUI/DeviceManager.cpp` (Tray-Parsing ~Z. 4100–4217),
   `command_ams_filament_settings` (`DeviceManager.cpp:1667`), `pushall` (`:1314`).
 - Lokales Spool-Schema (Mapping-Vorlage): `src/slic3r/GUI/fila_manager/wgtFilaManagerStore.h`.
 - Spoolman REST-API: offizielle Spoolman-Doku (`/api/v1/...`).
+- **Basis-Projekt (Fork-Kandidat):** `drndos/openspoolman` (Python/Docker, MQTT-LAN→Spoolman).
+- **Bambu-RFID per Handy:** `MrBambuSpoolPal` (Android, Bambu-Tags → Spoolman).
+- **Offener NFC-Tag-Standard (Dritthersteller):** `spuder/OpenSpool` (NDEF, ESP32+PN532).
 - Community-Referenzen für Bambu-MQTT-Parsing: `pybambu`, `bambulabs-api`,
-  Home-Assistant-Bambu-Integration, „OpenSpool" (RFID↔Spoolman-Ideen).
+  Home-Assistant-Bambu-Integration.
+- Web NFC (PWA): NDEF-only, kein Mifare Classic → Bambu-Tags nicht per Browser lesbar.
