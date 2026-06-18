@@ -345,18 +345,43 @@ Gewichtserkennung per Kamera. → Ideal für **dein Karton-/Erst-Onboarding** pe
 
 ---
 
-## 10. Etikettendruck-Integration (Printer Hub / Brother)
+## 10. Etikettendruck-Integration (Label-Printer-Hub / Brother)
 
-Onboarding-Hook: sobald eine Spool angelegt/zugeordnet ist, ruft die Bridge dein
-**Printer-Hub-Projekt** auf, um auf dem **Brother-Etikettendrucker** ein Label zu drucken.
+Onboarding-Hook: sobald eine Spool angelegt/zugeordnet ist, ruft die Bridge das
+**Label-Printer-Hub** (`strausmann/Label-Printer-Hub`) im **Push-Mode (Webhook)** auf und
+druckt auf dem **Brother**-Etikettendrucker (PT-/QL-Serie) ein Label.
 
 - **Trigger:** nach `POST /spool` (neue Rolle) bzw. auf Knopfdruck in der PWA.
-- **Label-Inhalt (Vorschlag):** **#Zahl**, Material + Farbe, ggf. RFID-`tag_uid`, und ein
-  **QR-Code** auf die Spoolman-Spool-URL (`/spool/{id}`) für schnelles Wiederfinden/Scannen.
-- **Anbindung:** generischer **Webhook/REST-Call** an die Printer-Hub-API (konfigurierbar in
-  `config.yaml`, z. B. `label_printer.webhook_url` + Template-Feldmapping).
-- **Offen:** API/Endpoint deines Printer-Hub-Projekts — Repo/Schnittstelle bitte nennen, dann
-  wird der konkrete Call hier spezifiziert.
+- **API:** `POST http://<label-hub>:8090/print` — Antwort `200` (synchron) oder `202` +
+  `job_id` (asynchron, Status via `GET /jobs/{job_id}`).
+- **Beispiel-Payload (direkte Daten):**
+  ```json
+  {
+    "template_id": "spool-qr-12mm",
+    "data": {
+      "title": "PLA Basic Grau #60",
+      "primary_id": "5D585F4000000100",
+      "qr_payload": "http://<spoolman>:7912/spool/123",
+      "secondary": ["PLA Basic · Grau", "1000 g", "AMS1/Slot2"]
+    },
+    "options": { "copies": 1, "auto_cut": true }
+  }
+  ```
+- **Feld-Mapping Bridge → Hub:**
+  - `title` ← Filamentname inkl. **#Zahl**
+  - `primary_id` ← **RFID `tag_uid`** (oder Spoolman-Spool-ID)
+  - `qr_payload` ← **Spoolman-Spool-URL** (`/spool/{id}`) zum schnellen Wiederfinden/Scannen
+  - `secondary[]` ← Material+Farbe, Sollgewicht, aktueller AMS-Slot
+- **Konfiguration** (`config.yaml`):
+  ```yaml
+  label_printer:
+    enabled: true
+    base_url: "http://label-hub:8090"
+    template_id: "spool-qr-12mm"
+    print_on_onboard: true
+  ```
+- **Hinweis:** Beide Dienste laufen als **Docker-Container im selben Netz** → Aufruf direkt
+  über Service-Name. Async-Jobs (`202`) optional via `GET /jobs/{job_id}` quittieren.
 
 ---
 
@@ -390,6 +415,7 @@ Onboarding-Hook: sobald eine Spool angelegt/zugeordnet ist, ruft die Bridge dein
 - **Basis-Projekt (Fork-Kandidat):** `drndos/openspoolman` (Python/Docker, MQTT-LAN→Spoolman).
 - **Bambu-RFID per Handy:** `MrBambuSpoolPal` (Android, Bambu-Tags → Spoolman).
 - **Offener NFC-Tag-Standard (Dritthersteller):** `spuder/OpenSpool` (NDEF, ESP32+PN532).
+- **Etikettendruck:** `strausmann/Label-Printer-Hub` (`POST /print` :8090, Brother PT/QL, Docker).
 - Community-Referenzen für Bambu-MQTT-Parsing: `pybambu`, `bambulabs-api`,
   Home-Assistant-Bambu-Integration.
 - Web NFC (PWA): NDEF-only, kein Mifare Classic → Bambu-Tags nicht per Browser lesbar.
