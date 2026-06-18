@@ -31,6 +31,21 @@ cloud_id). **TODO:** persist pending queue, verify gcode_state/tray_now/
 cloud-username **and the cloud filament endpoint path** against a real
 printer/account.
 
+## Finding the real cloud endpoint (packed DLL)
+
+`bambu_networking.dll` is packed, so static `strings` shows no URLs. The decrypted
+strings live in a **memory dump of the running Bambu Studio process** (1–1.5 GB —
+don't upload it, scan it locally):
+
+```bash
+python3 scripts/extract_endpoints.py StudioDump.dmp        # Python (any OS)
+# or on Windows with Sysinternals:  strings64.exe -n 6 StudioDump.dmp | findstr /i bambulab filament mqtt
+```
+
+Share only the matching `bambulab` / `/v1/...` / `filament` / `mqtt` lines — **redact any
+token/cookie/personal id**. Put the confirmed filament path into
+`config.cloud_library.endpoint`, then run the importer.
+
 ## Cloud library import
 
 Imports your Bambu Filament Manager library into Spoolman.
