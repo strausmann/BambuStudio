@@ -86,6 +86,10 @@ class SpoolmanClient:
     def set_active_tray(self, spool_id: int, slot: str | None) -> None:
         self.set_extra(spool_id, **{self.slot_field: slot or ""})
 
+    def set_location(self, spool_id: int, location: str | None) -> None:
+        """Spoolman's native (first-class) location field used for storage grouping."""
+        self._patch_spool(spool_id, {"location": location or ""})
+
     def set_remaining(self, spool_id: int, grams: float) -> None:
         self._patch_spool(spool_id, {"remaining_weight": round(grams, 2)})
 

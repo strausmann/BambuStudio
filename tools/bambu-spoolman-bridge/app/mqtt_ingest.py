@@ -21,6 +21,36 @@ log = logging.getLogger("bridge.mqtt")
 
 TrayHandler = Callable[[Tray], None]
 StatusHandler = Callable[[str, dict], None]  # (printer_serial, print_obj)
+VersionHandler = Callable[[str, list], None]  # (printer_serial, [ams module dicts])
+
+# Module name prefix -> friendly AMS model (concept §2.3). See DevAmsType in
+# src/slic3r/GUI/DeviceCore/DevFilaSystem.h.
+AMS_TYPE_NAMES = {
+    "ams": "AMS",
+    "n3f": "AMS 2 Pro",
+    "n3s": "AMS HT",
+    "ams_lite": "AMS Lite",
+    "f1": "AMS Lite",
+}
+
+
+def parse_version_modules(info: dict) -> list[dict]:
+    """Extract AMS modules from a get_version response: name like 'n3f/0' plus sn."""
+    out: list[dict] = []
+    for m in info.get("module", []) or []:
+        name = str(m.get("name", ""))
+        if "/" not in name:
+            continue
+        prefix, _, idx = name.partition("/")
+        if prefix not in AMS_TYPE_NAMES:
+            continue
+        out.append({
+            "ams_id": int(idx) if idx.isdigit() else idx,
+            "type": AMS_TYPE_NAMES[prefix],
+            "sn": str(m.get("sn", "")),
+            "sw_ver": str(m.get("sw_ver", "")),
+        })
+    return out
 
 
 def _to_int(v, default=0) -> int:
@@ -45,6 +75,7 @@ class BambuPrinterMQTT:
         access_code: str,
         on_tray: TrayHandler,
         on_status: StatusHandler | None = None,
+        on_version: VersionHandler | None = None,
         port: int = 8883,
     ):
         self.serial = serial
@@ -52,6 +83,7 @@ class BambuPrinterMQTT:
         self.access_code = access_code
         self.on_tray = on_tray
         self.on_status = on_status
+        self.on_version = on_version
         self.port = port
         self._client = mqtt.Client(client_id=f"bridge-{serial}")
         self._client.username_pw_set("bblp", access_code)
@@ -87,11 +119,17 @@ class BambuPrinterMQTT:
         client.subscribe(self.report_topic)
         # Ask for a full state snapshot (must re-send after every reconnect).
         client.publish(self.request_topic, json.dumps({"pushing": {"command": "pushall"}}))
+        # Ask for module versions -> AMS type + serial number (concept §2.3).
+        client.publish(self.request_topic, json.dumps({"info": {"command": "get_version"}}))
 
     def _on_message(self, client, userdata, msg):
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
+            return
+        info_obj = payload.get("info")
+        if isinstance(info_obj, dict) and info_obj.get("command") == "get_version" and self.on_version:
+            self.on_version(self.serial, parse_version_modules(info_obj))
             return
         print_obj = payload.get("print")
         if not isinstance(print_obj, dict):

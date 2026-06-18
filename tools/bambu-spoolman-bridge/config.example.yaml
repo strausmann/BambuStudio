@@ -25,6 +25,12 @@ consumption:
 
 ams:
   override_settings: false          # needs Developer Mode -> keep false (concept §5.5)
+  # Friendly Spoolman location names per AMS serial (learned via get_version).
+  # Leave empty to auto-name as "AMS 2 Pro (SN-suffix)". Find the SN in the logs.
+  aliases:
+    # "AMSSN0001": "Werkstatt-links"
+    # "AMSSN0002": "Werkstatt-rechts"
+  storage_location: "Lager"         # location set on a spool when it leaves the AMS
 
 label_printer:
   enabled: false

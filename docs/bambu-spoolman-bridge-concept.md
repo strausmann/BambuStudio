@@ -83,11 +83,22 @@ Verifiziert aus `src/slic3r/GUI/DeviceManager.cpp` (AMS-Tray-Parsing ~Z. 4100–
 > gültige RFID haben `tag_uid == "0"`/leer und kein verlässliches `remain` → in der Bridge
 > ausfiltern (`is_valid_tag_uid`: nicht nur Nullen).
 
-### 2.3 Mehrere AMS / mehrere Drucker
+### 2.3 Mehrere AMS / mehrere Drucker + AMS-Identität
 
 - AMS-Geräte liegen unter `print.ams.ams[]` mit eigener `id` (deine 2× AMS 2 Pro → zwei Einträge,
   je 4 Trays). Slot-Schlüssel = `(device_serial, ams_id, tray_id)`.
 - Pro Drucker eine eigene MQTT-Verbindung (eigene `SERIAL` + Access Code).
+
+**Mehr als nur „AMS1/AMS2" — via `get_version` (LAN-MQTT, keine Cloud nötig):**
+Der Drucker liefert auf `{"info":{"command":"get_version"}}` eine Modulliste mit Einträgen wie
+`n3f/0`, `n3f/1` (= **AMS 2 Pro**), `ams/0` (klassisches AMS), `n3s/128` (Single/HT) — jeweils
+mit **`sn` (Seriennummer)** und Firmware. Daraus baut die Bridge einen **sprechenden Namen**:
+- `config.ams.aliases` (Seriennummer → Wunschname, z. B. „Werkstatt-links"), sonst
+- Fallback `"AMS 2 Pro (1234)"` (Typ + SN-Endung), sonst `"AMS0"`.
+
+Typ-Mapping (aus `DevAmsType`, `DevFilaSystem.h`): `ams`→AMS, `n3f`→AMS 2 Pro, `n3s`→AMS HT,
+`ams_lite`/`f1`→AMS Lite. **Bonus** (N3F/N3S): Luftfeuchte %, Trocknungs-Restzeit, Temperatur —
+optional später als Spool-/Lager-Hinweis nutzbar.
 
 ---
 
@@ -133,6 +144,9 @@ consumption:
   reconcile_on_unload: true
 ams:
   override_settings: false     # kein Developer Mode → MQTT-Slot-Override aus (§5.5)
+  aliases:                     # AMS-Seriennummer → Lagerort-Name (§2.3); leer = Auto-Name
+    # "AMSSN0001": "Werkstatt-links"
+  storage_location: "Lager"    # Lagerort, wenn die Rolle das AMS verlässt (§5.3)
 ```
 
 ---
@@ -260,24 +274,27 @@ Spule eingelegt
   ganz, wird sie auf Wunsch direkt aus den Tray-Metadaten angelegt (§4.1.1).
 - Initialgewicht der neuen Spool: aus `tray_weight` (Soll) bzw. `remain% × tray_weight`.
 
-### 5.3 AMS-Slot-Pflege in Spoolman
+### 5.3 AMS-Slot als Spoolman-Lagerort
 
-Den aktuellen AMS-Slot bilden wir im Spool-Extra-Field **`active_tray`** ab (Community-Konvention,
-§4.2); zusätzlich kann das eingebaute `location`-Feld für „Lager" genutzt werden:
+Der AMS-Slot wird mit dem **sprechenden Namen** aus §2.3 (`<AMS-Name>/Slot<n>`, 1-basiert)
+in **zwei** Feldern gepflegt:
+- **`location`** (Spoolmans **natives** Lagerort-Feld) → so erscheint die Rolle in Spoolmans
+  Standortverwaltung direkt am AMS-Slot („AMS und Slots als Lagerort").
+- **`active_tray`** (Extra-Field, Community-Konvention §4.2) → Kompatibilität mit OpenSpoolMan.
 
 ```
 Tray-Update (tag_uid bekannt)
-   └▶ active_tray der Spool setzen: "<printer>/AMS<ams_id>/Slot<tray_id>"
-      └▶ alte Belegung desselben Slots (anderer tag_uid) → active_tray dort leeren
-Entladen (Slot wird leer / tag_uid wechselt)
-   └▶ active_tray der vorigen Spool leeren (location ggf. auf "Lager") + Reconcile (§5.2)
+   └▶ location + active_tray setzen: "Werkstatt-links/Slot2"  (Alias o. "AMS 2 Pro (1234)/Slot2")
+      └▶ alte Belegung desselben Slots (anderer tag_uid) → dort location → "Lager", active_tray leeren
+Entladen (Slot leer / tag_uid wechselt)
+   └▶ vorige Spool: location → config.ams.storage_location ("Lager"), active_tray leeren + Reconcile (§5.2)
 ```
 
 - Quelle der Slot-Belegung = `slot_state`-Tabelle (§7): Schlüssel `(device_serial, ams_id, tray_id)`.
-- So siehst du in Spoolman direkt, **welche Rolle gerade in welchem AMS-Slot** steckt — über
-  beide AMS 2 Pro hinweg.
-- Optional zusätzlich Spoolman-Felder `first_used` (bei erstem Slot-Einsatz) / `last_used`
-  (bei jedem Verbrauchs-Event) pflegen.
+- So siehst du in Spoolman direkt, **welche Rolle in welchem (benannten) AMS-Slot** steckt — über
+  beide AMS 2 Pro hinweg, mit echten Namen statt „AMS1/AMS2".
+- Beim Entladen wandert die Rolle als Lagerort zurück auf `storage_location` (Default „Lager").
+- Optional zusätzlich Spoolman-Felder `first_used` / `last_used` pflegen.
 
 ### 5.2 Verbrauchsmanagement (Modus `combined`)
 

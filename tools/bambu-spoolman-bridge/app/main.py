@@ -57,8 +57,16 @@ class Bridge:
         self.public_url = self.cfg.get("spoolman_public_url", sm.get("base_url", "")).rstrip("/")
         self.label_on_onboard = bool(lp.get("print_on_onboard", False))
 
+        ams_cfg = self.cfg.get("ams", {})
+        # alias map keyed by AMS serial number, e.g. {"AMSSN1234": "Werkstatt-links"}
+        self.ams_aliases: dict[str, str] = ams_cfg.get("aliases", {}) or {}
+        # where a spool's location is set when it leaves the AMS
+        self.storage_location = ams_cfg.get("storage_location", "Lager")
+
         # in-memory onboarding queue: tag_uid -> tray snapshot
         self._pending: dict[str, dict[str, Any]] = {}
+        # AMS identity learned from get_version: (serial, ams_id) -> {type, sn}
+        self.ams_identity: dict[tuple[str, int], dict[str, str]] = {}
         self._lock = threading.Lock()
         self._printers: list[BambuPrinterMQTT] = []
 
@@ -69,8 +77,30 @@ class Bridge:
         except Exception:  # noqa: BLE001
             log.exception("on_tray failed (%s ams%s tray%s)", tray.printer_serial, tray.ams_id, tray.tray_id)
 
+    def on_version(self, serial: str, modules: list[dict]) -> None:
+        with self._lock:
+            for m in modules:
+                ams_id = m.get("ams_id")
+                if isinstance(ams_id, int):
+                    self.ams_identity[(serial, ams_id)] = {"type": m.get("type", "AMS"), "sn": m.get("sn", "")}
+        if modules:
+            log.info("[%s] AMS modules: %s", serial, modules)
+
+    def _ams_name(self, tray: Tray) -> str:
+        """Human-friendly AMS name: config alias > 'Type (SNxxxx)' > 'AMS<id>'."""
+        ident = self.ams_identity.get((tray.printer_serial, tray.ams_id))
+        if ident:
+            sn = ident.get("sn", "")
+            if sn and sn in self.ams_aliases:
+                return self.ams_aliases[sn]
+            if sn:
+                return f"{ident['type']} ({sn[-4:]})"
+            return ident["type"]
+        return f"AMS{tray.ams_id}"
+
     def _slot_str(self, tray: Tray) -> str:
-        return f"{tray.printer_serial}/AMS{tray.ams_id}/Slot{tray.tray_id}"
+        # 1-based slot number for humans (Bambu UI shows slots 1..4).
+        return f"{self._ams_name(tray)}/Slot{tray.tray_id + 1}"
 
     def _handle_tray(self, tray: Tray) -> None:
         if tray.is_empty:
@@ -93,10 +123,12 @@ class Bridge:
             return
 
         self.db.touch_tag(tray.tag_uid)
+        slot = self._slot_str(tray)
         try:
-            self.spoolman.set_active_tray(spool_id, self._slot_str(tray))
+            self.spoolman.set_active_tray(spool_id, slot)          # OpenSpoolMan-compat extra
+            self.spoolman.set_location(spool_id, slot)             # Spoolman native location (Lagerort)
         except Exception:  # noqa: BLE001
-            log.exception("set_active_tray failed for spool %s", spool_id)
+            log.exception("set location failed for spool %s", spool_id)
         self.consumption.reconcile_remaining(spool_id, tray)
 
     def _clear_slot_for_tag(self, tag_uid: str) -> None:
@@ -104,8 +136,9 @@ class Bridge:
         if spool_id is not None:
             try:
                 self.spoolman.set_active_tray(spool_id, None)
+                self.spoolman.set_location(spool_id, self.storage_location)  # back to storage
             except Exception:  # noqa: BLE001
-                log.exception("clear active_tray failed for spool %s", spool_id)
+                log.exception("clear slot/location failed for spool %s", spool_id)
 
     def _tray_snapshot(self, tray: Tray) -> dict[str, Any]:
         return {
@@ -151,7 +184,7 @@ class Bridge:
                 continue
             client = BambuPrinterMQTT(
                 serial=p["serial"], host=lan["host"], access_code=lan.get("access_code", ""),
-                on_tray=self.on_tray,
+                on_tray=self.on_tray, on_version=self.on_version,
             )
             client.start()
             self._printers.append(client)
@@ -191,10 +224,13 @@ class TagReq(BaseModel):
 # ---- routes --------------------------------------------------------------
 @app.get("/api/state")
 def api_state() -> dict[str, Any]:
+    with bridge._lock:
+        ams = [{"printer": k[0], "ams_id": k[1], **v} for k, v in bridge.ams_identity.items()]
     return {
         "pending": bridge.pending,
         "free_tags": bridge.db.list_tags("freed"),
         "all_tags": bridge.db.list_tags(),
+        "ams": ams,
     }
 
 
