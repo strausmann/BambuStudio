@@ -1,0 +1,22 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; padding: 0 0 3rem; max-width: 760px; margin-inline: auto; }
+header { display: flex; align-items: baseline; gap: .75rem; padding: 1rem; border-bottom: 1px solid #8884; }
+h1 { font-size: 1.1rem; margin: 0; }
+h2 { font-size: .95rem; margin: 1.2rem 1rem .4rem; }
+section { padding-inline: .5rem; }
+.caps { font-size: .75rem; opacity: .7; }
+.muted { opacity: .6; font-size: .85rem; margin: .3rem 1rem; }
+.cards { display: flex; flex-direction: column; gap: .5rem; padding-inline: .5rem; }
+.card { border: 1px solid #8884; border-radius: .6rem; padding: .6rem .8rem; }
+.card .t { font-weight: 600; }
+.card .s { font-size: .8rem; opacity: .75; }
+.dot { display: inline-block; width: .9rem; height: .9rem; border-radius: 50%; vertical-align: middle; margin-right: .4rem; border: 1px solid #0003; }
+button { padding: .5rem .9rem; border-radius: .5rem; border: 1px solid #8886; background: #2d7; color: #043; font-weight: 600; cursor: pointer; }
+button.ghost { background: transparent; color: inherit; }
+.row { display: flex; align-items: center; gap: .6rem; margin: .5rem 1rem; flex-wrap: wrap; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; padding: .5rem 1rem; }
+.grid label, dialog label { display: flex; flex-direction: column; font-size: .75rem; gap: .2rem; }
+input { padding: .4rem; border-radius: .4rem; border: 1px solid #8886; background: transparent; color: inherit; }
+.out { background: #8881; padding: .5rem; border-radius: .4rem; overflow:auto; max-height: 8rem; }
+dialog { border: none; border-radius: .8rem; padding: 1rem; max-width: 90vw; }
+menu { display: flex; gap: .5rem; justify-content: flex-end; padding: 0; }

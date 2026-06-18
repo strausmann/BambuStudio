@@ -1,0 +1,129 @@
+"""LAN MQTT ingest for a single Bambu printer (concept §2, §3.1).
+
+Subscribes to device/<serial>/report, requests a full state once connected
+(pushall), and parses AMS trays into Tray objects passed to a callback.
+
+Cloud-MQTT fallback (§3.2) is a TODO.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import ssl
+import threading
+from typing import Callable
+
+import paho.mqtt.client as mqtt
+
+from .models import Tray
+
+log = logging.getLogger("bridge.mqtt")
+
+TrayHandler = Callable[[Tray], None]
+StatusHandler = Callable[[str, dict], None]  # (printer_serial, print_obj)
+
+
+def _to_int(v, default=0) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(v, default=0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+class BambuPrinterMQTT:
+    def __init__(
+        self,
+        serial: str,
+        host: str,
+        access_code: str,
+        on_tray: TrayHandler,
+        on_status: StatusHandler | None = None,
+        port: int = 8883,
+    ):
+        self.serial = serial
+        self.host = host
+        self.access_code = access_code
+        self.on_tray = on_tray
+        self.on_status = on_status
+        self.port = port
+        self._client = mqtt.Client(client_id=f"bridge-{serial}")
+        self._client.username_pw_set("bblp", access_code)
+        # Printer uses a self-signed cert; accept it (LAN).
+        self._client.tls_set(cert_reqs=ssl.CERT_NONE)
+        self._client.tls_insecure_set(True)
+        self._client.on_connect = self._on_connect
+        self._client.on_message = self._on_message
+        self._thread: threading.Thread | None = None
+
+    @property
+    def report_topic(self) -> str:
+        return f"device/{self.serial}/report"
+
+    @property
+    def request_topic(self) -> str:
+        return f"device/{self.serial}/request"
+
+    def start(self) -> None:
+        def run():
+            try:
+                self._client.connect(self.host, self.port, keepalive=60)
+                self._client.loop_forever(retry_first_connection=True)
+            except Exception:  # noqa: BLE001 - prototype: log and let supervisor restart
+                log.exception("[%s] MQTT loop crashed", self.serial)
+
+        self._thread = threading.Thread(target=run, name=f"mqtt-{self.serial}", daemon=True)
+        self._thread.start()
+
+    # ---- callbacks --------------------------------------------------------
+    def _on_connect(self, client, userdata, flags, rc):
+        log.info("[%s] connected rc=%s", self.serial, rc)
+        client.subscribe(self.report_topic)
+        # Ask for a full state snapshot (must re-send after every reconnect).
+        client.publish(self.request_topic, json.dumps({"pushing": {"command": "pushall"}}))
+
+    def _on_message(self, client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return
+        print_obj = payload.get("print")
+        if not isinstance(print_obj, dict):
+            return
+        if self.on_status:
+            self.on_status(self.serial, print_obj)
+        self._parse_ams(print_obj)
+
+    def _parse_ams(self, print_obj: dict) -> None:
+        ams_root = print_obj.get("ams")
+        if not isinstance(ams_root, dict):
+            return
+        for ams in ams_root.get("ams", []) or []:
+            ams_id = _to_int(ams.get("id"), -1)
+            for tray in ams.get("tray", []) or []:
+                self.on_tray(self._tray_from_json(ams_id, tray))
+
+    def _tray_from_json(self, ams_id: int, t: dict) -> Tray:
+        cols = [c for c in (t.get("cols") or []) if isinstance(c, str)]
+        return Tray(
+            printer_serial=self.serial,
+            ams_id=ams_id,
+            tray_id=_to_int(t.get("id"), -1),
+            tag_uid=str(t.get("tag_uid", "") or ""),
+            tray_uuid=str(t.get("tray_uuid", "") or ""),
+            setting_id=str(t.get("tray_info_idx", "") or ""),
+            material=str(t.get("tray_type", "") or ""),
+            sub_brands=str(t.get("tray_sub_brands", "") or ""),
+            color=str(t.get("tray_color", "") or ""),
+            colors=cols,
+            remain=_to_int(t.get("remain"), -1),
+            tray_weight=_to_float(t.get("tray_weight"), 0.0),
+            nozzle_temp_min=_to_int(t.get("nozzle_temp_min"), 0),
+            nozzle_temp_max=_to_int(t.get("nozzle_temp_max"), 0),
+        )

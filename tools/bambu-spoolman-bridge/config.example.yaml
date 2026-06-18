@@ -1,0 +1,35 @@
+# Copy to data/config.yaml and edit. See concept doc:
+#   docs/bambu-spoolman-bridge-concept.md
+
+printers:
+  - name: x1c-werkstatt
+    serial: "00M00A2B0123456"      # printer serial (PRINTER_ID)
+    transport: auto                 # auto | lan | cloud   (cloud = TODO)
+    lan:
+      host: "192.168.1.50"
+      access_code: "12345678"       # LAN access code from the printer screen
+
+bambu_account:
+  region: eu                        # eu/us -> global infra (api.bambulab.com)
+  token: ""                         # only needed for cloud fallback (TODO)
+
+spoolman:
+  base_url: "http://spoolman:7912"
+  # Community-convention Spoolman extra fields (interop with OpenSpoolMan / BambuSpoolPal):
+  tag_field: "tag"                  # spool extra field that stores the RFID tag_uid
+  slot_field: "active_tray"         # spool extra field for the current AMS slot
+
+consumption:
+  mode: combined                    # per_job | remain | combined
+  reconcile_threshold_pct: 3        # only correct remaining when drift exceeds this
+
+ams:
+  override_settings: false          # needs Developer Mode -> keep false (concept §5.5)
+
+label_printer:
+  enabled: false
+  base_url: "http://label-hub:8090"
+  template_id: "spool-qr-12mm"
+  print_on_onboard: true
+
+spoolman_public_url: "http://spoolman:7912"   # used to build qr_payload (/spool/{id})

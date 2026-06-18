@@ -1,0 +1,29 @@
+# Bambu <-> Spoolman Bridge — prototype scaffold.
+#
+# Spoolman and the Label-Printer-Hub are expected to run separately (their own
+# compose files). Put them on a shared docker network so the bridge can reach
+# them by service name. Adjust `networks` to match your setup.
+#
+# For phone access / Web NFC you need HTTPS in front of this UI — see the
+# concept doc §12 (Pangolin / Traefik / NPM / Caddy). This compose intentionally
+# only exposes plain HTTP on the LAN; terminate TLS in your reverse proxy.
+
+services:
+  bridge:
+    build: .
+    # image: ghcr.io/youruser/bambu-spoolman-bridge:latest   # once published
+    container_name: bambu-spoolman-bridge
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./data:/data            # holds config.yaml + state.db
+    environment:
+      BRIDGE_CONFIG: /data/config.yaml
+      BRIDGE_DB: /data/state.db
+    # networks:
+    #   - spoolman_net
+
+# networks:
+#   spoolman_net:
+#     external: true

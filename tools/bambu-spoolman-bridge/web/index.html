@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bambu ↔ Spoolman Bridge</title>
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Bambu ↔ Spoolman Bridge</h1>
+    <span id="caps" class="caps"></span>
+  </header>
+
+  <section>
+    <h2>Neue Spulen (RFID erkannt, noch nicht zugeordnet)</h2>
+    <div id="pending" class="cards"><p class="muted">— lädt —</p></div>
+  </section>
+
+  <section>
+    <h2>Freie Tags (wiederverwendbar)</h2>
+    <div id="free" class="cards"><p class="muted">—</p></div>
+  </section>
+
+  <section>
+    <h2>Custom-NFC-Tag (Drittanbieter) — lesen / schreiben</h2>
+    <div class="row">
+      <button id="nfc-read">Tag lesen</button>
+      <pre id="nfc-out" class="out">—</pre>
+    </div>
+    <div class="grid">
+      <label>type <input id="w-type" value="PLA" /></label>
+      <label>color_hex <input id="w-color" value="FFFFFF" /></label>
+      <label>brand <input id="w-brand" value="Sunlu" /></label>
+      <label>min_temp <input id="w-min" value="190" /></label>
+      <label>max_temp <input id="w-max" value="230" /></label>
+      <label>spoolman_id <input id="w-spool" value="" /></label>
+    </div>
+    <button id="nfc-write">OpenSpool-Tag schreiben</button>
+  </section>
+
+  <!-- bind dialog -->
+  <dialog id="bind-dlg">
+    <form method="dialog">
+      <h3>Spule zuordnen</h3>
+      <p id="bind-info" class="muted"></p>
+      <label>Spoolman-Spool-ID
+        <input id="bind-spool" type="number" inputmode="numeric" />
+      </label>
+      <div class="row">
+        <button id="bind-scan" type="button">QR scannen</button>
+        <span id="bind-scaninfo" class="muted"></span>
+      </div>
+      <menu>
+        <button value="cancel">Abbrechen</button>
+        <button id="bind-ok" value="ok">Zuordnen</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
