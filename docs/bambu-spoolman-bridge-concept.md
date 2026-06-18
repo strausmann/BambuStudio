@@ -623,8 +623,11 @@ aufs Handy gebracht über **Pangolin** (self-hosted Reverse-Proxy/Tunnel mit ein
                                                      ├─ REST → Spoolman
                                                      └─ REST → Label-Printer-Hub
   ```
-- **Alternativen** (falls ohne Pangolin): lokales HTTPS mit eigenem Zertifikat / Reverse-Proxy;
-  reine LAN-IP über `http://` scheidet für Web NFC aus.
+- **Alternativen zu Pangolin:** jeder HTTPS-fähige Reverse-Proxy erfüllt den Web-NFC-Secure-
+  Context genauso — **Traefik**, **Nginx Proxy Manager (NPM)** oder **Caddy** (Caddy mit
+  Auto-HTTPS am einfachsten). Pangolins Vorteil ist das **eingebaute SSO**; bei Traefik/NPM/Caddy
+  ergänzt man Auth bei Bedarf über **Authelia/Authentik** (oder Basic-Auth/mTLS).
+  Reine LAN-IP über `http://` scheidet für Web NFC in allen Fällen aus.
 
 ---
 
