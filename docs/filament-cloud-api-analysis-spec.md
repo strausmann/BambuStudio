@@ -276,6 +276,43 @@ Code-Felder (§1.3) gegenprüfen — Abweichungen/neue Felder explizit markieren
 
 ---
 
+## 5.2 Befund: Reale `bambu_networking.dll` ist **gepackt** → statische Analyse blockiert
+
+Analyse einer echten `bambu_networking.dll` (PE32+ x86-64, ~20 MB, Build mit GlobalSign-Signatur):
+
+- **Gepackt/protected.** Sektionstabelle verfremdet: Standard-Sektionen `.text/.rdata/.data/.pdata`
+  haben **Größe 0 / keine `CONTENTS`**; die gesamte Nutzlast liegt in **einer** Sektion `.gf*`
+  (~20 MB, CODE+DATA) neben Müllnamen `.2xi`, `.[gg`. **Entropie der `.gf*`-Sektion ≈ 7.88
+  bits/Byte** (≈ 8.0 = vollständig verschlüsselt/komprimiert).
+- **Keine Endpoints im Klartext.** `strings` (ASCII **und** UTF-16) liefert **nur**:
+  - GlobalSign-Code-Signing-Cert-URLs (`*.globalsign.com`) — irrelevant,
+  - `api-ms-win-crt-*.dll` Import-Namen,
+  - die **Export-Namen** `bambu_network_*`.
+  - **Kein** `bambulab.com`, **kein** `/v1/...`, **kein** `Bearer`, **kein** MQTT-Host.
+- **Host/Pfade entstehen zur Laufzeit.** Es gibt sogar einen Export
+  `bambu_network_get_bambulab_host` — der Host wird also **berechnet/entschlüsselt**, nicht als
+  String vorgehalten. Gleiches gilt für die Filament-Pfade.
+
+**Konsequenz:** Reines `strings`/Ghidra-Static auf diesem Build **bestätigt die Endpoints NICHT**.
+Bestätigte (Export-)API-Oberfläche, u. a.:
+`get_my_token`, `get_my_profile`, `get_bambulab_host`, `set_extra_http_header`,
+`get_filament_spools`, `create_filament_spool`, `update_filament_spool`,
+`delete_filament_spools`, `get_filament_config`, `get_setting_list(2)`, `get_user_presets`,
+`get_oss_config`, `start_print`, `get_subtask` … (vollständige Liste im Tool-Log).
+
+**Wege zum Pfad trotz Packing (Priorität):**
+1. **mitmproxy-Capture (§3) — empfohlen, geringster Aufwand.** Liefert Host+Pfad+Body direkt.
+2. **Memory-Dump des entpackten Prozesses:** Bambu Studio starten, Prozess dumpen (z. B.
+   `procdump`/Task-Manager → „Abbilddatei erstellen"), dann `strings` auf den **Dump** — die zur
+   Laufzeit entschlüsselten URLs erscheinen dort im Klartext.
+3. **Dynamische Instrumentierung** (Frida/x64dbg, Hook auf die HTTP-/Connect-Funktion) — am
+   aufwändigsten, Windows-gebunden.
+
+→ Für unser Vorhaben: **Weg 1 (mitmproxy)**; der `file`-Modus des Cloud-Importers
+(`tools/bambu-spoolman-bridge`) testet das Mapping dann gegen den Capture, bevor der Pfad fix ist.
+
+---
+
 ## 6. Troubleshooting / bekannte Fallstricke
 
 - **Kein Traffic sichtbar / TLS-Fehler in Bambu Studio:** wahrscheinlich **Cert-Pinning**
