@@ -499,10 +499,15 @@ Gewichtserkennung per Kamera. → Ideal für **dein Karton-/Erst-Onboarding** pe
 ### 9.2 Rolle der PWA in unserem Projekt
 
 - **Onboarding-/Bedien-UI** der Bridge als **PWA** (mobil bedienbar, „neue Spule zuordnen").
-- **Web NFC nur für Dritthersteller**: in der PWA „Tag schreiben" → OpenSpool-NDEF-JSON
-  (`protocol`, `version`, `type`, `color_hex`, `brand`, `min_temp`, `max_temp`) auf NTAG-215/216
-  schreiben, Spoolman-ID/#Zahl mit einbetten.
-- **Bambu-Tag-Lesen** bleibt **MQTT (im AMS)** bzw. **native App (vor dem AMS)** — nicht PWA.
+- **Custom-NDEF-Tags (Dritthersteller): die PWA liest UND schreibt sie** — im **gleichen
+  Format wie das ESP32** (OpenSpool-NDEF-JSON: `protocol`, `version`, `type`, `color_hex`,
+  `brand`, `min_temp`, `max_temp`; + eingebettete Spoolman-ID/#Zahl). PWA und ESP32 sind damit
+  austauschbare Lese-/Schreibstationen für dieselben Tags.
+- **Bambu-Tag-Lesen** bleibt **MQTT (im AMS)** bzw. **native App (vor dem AMS)** — nicht PWA
+  (Mifare Classic, §9).
+- **Voraussetzung Web NFC = HTTPS (Secure Context).** Über eine reine LAN-IP (`http://…`)
+  funktioniert Web NFC **nicht**. → Die PWA muss per **HTTPS** erreichbar sein; genau das löst
+  die Pangolin-Anbindung (§12) elegant mit.
 
 ### 9.3 Zwei Tag-Klassen + ESP32-/OpenSpool-Kompatibilität
 
@@ -600,7 +605,30 @@ druckt auf dem **Brother**-Etikettendrucker (PT-/QL-Serie) ein Label.
 
 ---
 
-## 12. Referenzen
+## 12. Deployment & Zugriff (Pangolin + SSO)
+
+Die Bridge läuft als **Docker-Container im LAN**; die **Web-UI/PWA** wird bequem und sicher
+aufs Handy gebracht über **Pangolin** (self-hosted Reverse-Proxy/Tunnel mit eingebautem SSO).
+
+- **Pangolin „Public Resource"** veröffentlicht die Bridge-UI unter einer echten Domain mit
+  **automatischem HTTPS** — was zugleich die **Web-NFC-Voraussetzung (Secure Context, §9.2)**
+  erfüllt. Damit funktioniert das **Lesen/Schreiben der Custom-Tags direkt aus der PWA** unterwegs.
+- **Pangolin SSO** davor → kein offenes Endpoint im Internet, nur authentifizierter Zugriff.
+- **Datenfluss bleibt lokal:** MQTT zum Drucker, Spoolman- und Label-Hub-Calls laufen weiter im
+  LAN/Docker-Netz; nur die **UI** wird via Pangolin erreichbar gemacht (kein Cloud-Zwang).
+- **Topologie:**
+  ```
+  Handy (PWA, Web NFC) ──HTTPS+SSO──▶ Pangolin ──▶ Bridge-UI (Docker, LAN)
+                                                     │  MQTT → Drucker/AMS
+                                                     ├─ REST → Spoolman
+                                                     └─ REST → Label-Printer-Hub
+  ```
+- **Alternativen** (falls ohne Pangolin): lokales HTTPS mit eigenem Zertifikat / Reverse-Proxy;
+  reine LAN-IP über `http://` scheidet für Web NFC aus.
+
+---
+
+## 13. Referenzen
 
 - Schwester-Spec (Cloud-REST/Endpoints): `docs/filament-cloud-api-analysis-spec.md`
 - AMS-Tray-Felder im Quellcode: `src/slic3r/GUI/DeviceManager.cpp` (Tray-Parsing ~Z. 4100–4217),
@@ -611,6 +639,7 @@ druckt auf dem **Brother**-Etikettendrucker (PT-/QL-Serie) ein Label.
 - **Bambu-RFID per Handy:** `MrBambuSpoolPal` (Android, Bambu-Tags → Spoolman).
 - **Offener NFC-Tag-Standard (Dritthersteller):** `spuder/OpenSpool` (NDEF, ESP32+PN532).
 - **Etikettendruck:** `strausmann/Label-Printer-Hub` (`POST /print` :8090, Brother PT/QL, Docker).
+- **Zugriff/Exposure:** Pangolin (self-hosted Reverse-Proxy/Tunnel + SSO, HTTPS für Web NFC).
 - Community-Referenzen für Bambu-MQTT-Parsing: `pybambu`, `bambulabs-api`,
   Home-Assistant-Bambu-Integration.
 - Web NFC (PWA): NDEF-only, kein Mifare Classic → Bambu-Tags nicht per Browser lesbar.
