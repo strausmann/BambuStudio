@@ -10,8 +10,8 @@ hook.
 > are optional. It only reads/writes Spoolman's native `location` field as plain
 > text, so any external viewer (e.g. Hangar) is purely additive.
 
-> Design rationale and decisions: [`docs/bambu-spoolman-bridge-concept.md`](../../docs/bambu-spoolman-bridge-concept.md)
-> Cloud-API analysis (optional enrichment): [`docs/filament-cloud-api-analysis-spec.md`](../../docs/filament-cloud-api-analysis-spec.md)
+> Design rationale and decisions: [`docs/bambu-spoolman-bridge-concept.md`](docs/bambu-spoolman-bridge-concept.md)
+> Cloud-API analysis (optional enrichment): [`docs/filament-cloud-api-analysis-spec.md`](docs/filament-cloud-api-analysis-spec.md)
 
 ## Status
 
@@ -122,4 +122,20 @@ Web NFC/camera — front it with a reverse proxy (concept §12).
 
 ## License
 
-MIT (intended), to ease upstreaming into `drndos/openspoolman` (MIT). See concept §11.
+MIT — see [`LICENSE`](LICENSE). Chosen to ease upstreaming into `drndos/openspoolman`
+(MIT). Note: filament presets generated from BambuStudio/OrcaSlicer profiles are
+**AGPL-3.0** at the source and are produced locally (not redistributed here);
+SpoolmanDB data is MIT and fetched at runtime. See the third-party notes in `LICENSE`
+and concept §11.
+
+## Repository layout
+
+```
+app/        FastAPI service (MQTT ingest, Spoolman client, SQLite state, cloud import)
+web/        Tailwind PWA (onboarding, SpoolmanDB, preset generator, cloud import, NFC)
+scripts/    catalog builder, 3mf extractor, endpoint scanner, mitmproxy addon, redactor
+docs/       concept, API + database guidelines, capture runbook, capability matrix, HANDOVER
+issues/     backlog as Markdown (BR-xx review findings, F-xx features) — import via gh CLI
+analysis/   schema-only endpoint exchange (redacted; never raw flows/credentials)
+.github/    issue templates
+```

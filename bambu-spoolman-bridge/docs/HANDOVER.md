@@ -122,12 +122,12 @@ künftige Standalone-Repo-Root.
 cp -r bambu-spoolman-bridge/* bambu-spoolman-bridge/.gitignore <neues-repo>/
 # (alternativ: git filter-repo / git subtree split auf den Ordner, um Historie zu behalten)
 ```
-Inhalt: `app/ web/ scripts/ docs/ analysis/ Dockerfile docker-compose.yml requirements.txt
-config.example.yaml README.md .gitignore`.
+Inhalt: `app/ web/ scripts/ docs/ analysis/ issues/ .github/ Dockerfile docker-compose.yml
+requirements.txt config.example.yaml README.md LICENSE .gitignore`.
 
 **NICHT übernehmen:** `data/` (Config/DB/Secrets), Captures/Dumps, die Bambu-DLL, Tokens.
-(`.gitignore` blockt das bereits.) Optional entfernbar: `web/style.css` (von der Tailwind-UI
-nicht mehr genutzt).
+(`.gitignore` blockt das bereits.) Die ungenutzte `web/style.css` (Tailwind-UI) wurde
+bereits entfernt.
 
 **Lizenz-Entscheidung (wichtig):**
 - Der **App-Code ist Eigenentwicklung** → kann **MIT** sein. Empfehlung: neues Repo **MIT**,
