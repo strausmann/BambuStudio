@@ -1,0 +1,21 @@
+# Defensive: never let raw/sensitive capture artifacts get committed in this folder.
+*.jsonl
+*flows*
+filament_list*.json
+*.dmp
+*.dump
+core
+core.*
+*.pem
+*.crt
+*.cer
+*token*
+*cookie*
+*secret*
+keys.log
+
+# Allow only the curated, sanitized exchange files:
+!README.md
+!ENDPOINTS.md
+!endpoints.schema.json
+!.gitignore

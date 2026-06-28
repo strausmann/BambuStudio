@@ -126,13 +126,29 @@ curl -s -X POST localhost:8099/api/cloud/import \
 #    config.yaml -> cloud_library.endpoint: "<der echte Pfad aus Schritt 7>"
 ```
 
-## 9. [AGENT] Bericht zurück (ohne Geheimnisse)
+## 9. [AGENT] Ergebnisse über GitHub austauschen — **nur Schema, keine Daten**
 
-Melde knapp zurück:
-- **Tabelle** der Filament-Endpoints: Methode · Host · Pfad · Status.
-- **Request-/Response-Bodies** der Create/Update (Feldnamen/-typen) — Tokens/IDs geschwärzt.
-- Ob `filament_list.json` valide vom Importer (`dry_run`) verarbeitet wurde (created/skip-Zahlen).
-- Auffälligkeiten (Pagination, Wrapper-Keys, Fehlercodes).
+Der Austausch mit der Design-Session läuft ausschließlich über den Ordner `analysis/`
+(Regeln: `analysis/README.md`). **Niemals** Tokens/Cookies/JWT, rohe Flows
+(`bambu_flows.jsonl`), `filament_list.json`, Dumps oder echte RFIDs/IDs committen — die
+`analysis/.gitignore` blockt das defensiv.
+
+```bash
+cd ~/bambu
+# Rohflows -> reines Schema (jeder Wert -> <string>/<int>/… ; keine echten Werte):
+python3 tools/bambu-spoolman-bridge/scripts/redact_flows.py \
+    ~/capture/captures/bambu_flows.jsonl -o analysis/endpoints.schema.json
+# analysis/ENDPOINTS.md ausfüllen (Host, Pfade, Query-Keys, Status, Auffälligkeiten — in Worten)
+git add analysis/endpoints.schema.json analysis/ENDPOINTS.md
+git commit -m "analysis: captured filament endpoint schema (sanitized)"
+git push
+```
+
+Die Design-Session liest dann `analysis/endpoints.schema.json` + `ENDPOINTS.md`, stellt
+`cloud_library.endpoint` ein und antwortet über dieselben Dateien / den Code.
+
+> `filament_list.json` bleibt **lokal** auf der VM und wird **nur lokal** vom Importer
+> (`file`-Modus, Schritt 8) genutzt — es verlässt die Maschine nicht.
 
 ---
 
