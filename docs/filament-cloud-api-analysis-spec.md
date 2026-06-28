@@ -270,6 +270,35 @@ Schneller Weg ohne separaten Linux-Host — alles auf dem Windows-Client:
   **Memory-Dump-Weg** (§5.2) ausweichen. MQTT (Port 8883) geht ohnehin nicht über den HTTP-Proxy —
   für den Filament-**REST**-Endpoint aber irrelevant.
 
+### 3.4 Linux-Client — meist der bessere Weg für Capture & RE
+
+Bambu Studio läuft auch unter Linux; das Plugin heißt dort **`libbambu_networking.so`**
+(+ `libBambuSource.so`, `liblive555.so`) statt der DLL — **gleiches, gepacktes Plugin**, nur ELF.
+Statisch ist also nichts gewonnen, **dynamisch aber deutlich mehr möglich:**
+
+- **Transparenter Proxy (zuverlässiger als System-Proxy):** Traffic per `iptables` zu mitmproxy
+  umleiten — die App muss den Proxy nicht „freiwillig" beachten.
+  ```bash
+  mitmweb --mode transparent --listen-port 8080 -s scripts/mitm_bambu_addon.py
+  sudo sysctl -w net.ipv4.ip_forward=1
+  sudo iptables -t nat -A OUTPUT -p tcp --dport 443 -j REDIRECT --to-port 8080
+  ```
+- **Cert-Bundle-Trick identisch:** mitmproxy-CA an `…/resources/cert/slicer_base64.cer` anhängen.
+- **Fallbacks, die es auf Windows so nicht gibt:**
+  - `strace -f -e trace=connect,network -p <pid>` → sehen, **welche Hosts/Ports** verbunden werden.
+  - `SSLKEYLOGFILE=/tmp/keys.log` setzen → falls das Plugin **dynamisch** OpenSSL nutzt,
+    entschlüsselt Wireshark den TLS-Stream.
+  - **`LD_PRELOAD`-Shim auf libcurl** (`curl_easy_setopt`/`curl_easy_perform`) → URL im Klartext
+    loggen, **bevor** TLS/Pinning greift. *Caveat:* greift nur, wenn curl **dynamisch** gelinkt ist;
+    bei statischer Einbindung (wahrscheinlich, 20-MB-Blob) → `frida`/`gdb` auf Offsets nötig.
+  - Memory-Dump trivial: `gcore <pid>` → `strings` (entpackte URLs liegen dann im Klartext vor).
+
+**Empfehlung Windows vs. Linux:**
+- **Schnelle Capture, nur Windows vorhanden →** §3.3 reicht (Cert-Bundle-Trick ist OS-egal).
+- **RE / robuste Analyse / Pinning-Risiko →** **Linux** wählen: transparenter iptables-Redirect +
+  `strace`/`SSLKEYLOGFILE`/`LD_PRELOAD`/`gcore` machen die Analyse erheblich einfacher und
+  unabhängiger von Proxy-Goodwill und Packing.
+
 ---
 
 ## 4. Capture-Plan: Welche Aktionen in Bambu Studio auslösen
