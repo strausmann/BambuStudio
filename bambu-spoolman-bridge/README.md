@@ -62,7 +62,7 @@ curl -X POST localhost:8099/api/cloud/import -H 'Content-Type: application/json'
 ## Quick start
 
 ```bash
-cd tools/bambu-spoolman-bridge
+cd bambu-spoolman-bridge
 mkdir -p data
 cp config.example.yaml data/config.yaml   # then edit: printer serial, LAN host, access code, spoolman url
 docker compose up --build

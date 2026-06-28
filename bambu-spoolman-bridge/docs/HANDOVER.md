@@ -5,7 +5,7 @@
 > weiterzuentwickeln. Es ist self-contained — die neue Instanz braucht keinen Chat-Verlauf.
 >
 > **Herkunft:** entwickelt im Fork `strausmann/BambuStudio` (AGPL-3.0), Branch
-> `claude/dazzling-sagan-vdro2v`, unter `tools/bambu-spoolman-bridge/` + `docs/` + `analysis/`.
+> `claude/dazzling-sagan-vdro2v`, unter `` + `docs/` + `analysis/`.
 
 ---
 
@@ -58,7 +58,7 @@ Cloud (optional): Filament-Bibliothek/Presets via RE'd REST (nach Capture)
 **Transport:** LAN-MQTT (primär) + Cloud-MQTT-Fallback (Token). **Spoolman** = System of Record für
 Spulen; **Bridge-DB (SQLite)** = Mappings + Workflow-State + Cache + k-Katalog.
 
-**Code-Map (`tools/bambu-spoolman-bridge/app/`, ~2140 LOC):**
+**Code-Map (`app/`, ~2140 LOC):**
 | Datei | Inhalt | Status |
 |-------|--------|--------|
 | `main.py` | FastAPI-App, Verdrahtung, alle Endpoints, Bridge-State | ✅ läuft (Findings: Auth/Locks/Lazy-Init offen) |
@@ -112,16 +112,22 @@ Aus `docs/review-findings-backlog.md`:
 
 ## 7. Migration in ein eigenständiges Repo
 
-**Was kopieren** (wird zum neuen Repo-Root):
+**Bereits konsolidiert:** Das gesamte Projekt liegt jetzt in **einem** Ordner
+**`bambu-spoolman-bridge/`** (App im Root + `docs/` + `analysis/`). Dieser Ordner **ist** der
+künftige Standalone-Repo-Root.
+
+**Transfer = diesen einen Ordner kopieren:**
+```bash
+# im eigenständigen Repo:
+cp -r bambu-spoolman-bridge/* bambu-spoolman-bridge/.gitignore <neues-repo>/
+# (alternativ: git filter-repo / git subtree split auf den Ordner, um Historie zu behalten)
 ```
-tools/bambu-spoolman-bridge/  →  <neues-repo>/        (app/, web/, scripts/, Dockerfile,
-                                                        docker-compose.yml, requirements.txt,
-                                                        config.example.yaml, README.md, .gitignore)
-docs/*.md                     →  <neues-repo>/docs/
-analysis/                     →  <neues-repo>/analysis/
-```
-**NICHT kopieren:** `data/` (Config/DB/Secrets), Captures/Dumps, die Bambu-DLL, irgendwelche
-Tokens. (`.gitignore` blockt das bereits.)
+Inhalt: `app/ web/ scripts/ docs/ analysis/ Dockerfile docker-compose.yml requirements.txt
+config.example.yaml README.md .gitignore`.
+
+**NICHT übernehmen:** `data/` (Config/DB/Secrets), Captures/Dumps, die Bambu-DLL, Tokens.
+(`.gitignore` blockt das bereits.) Optional entfernbar: `web/style.css` (von der Tailwind-UI
+nicht mehr genutzt).
 
 **Lizenz-Entscheidung (wichtig):**
 - Der **App-Code ist Eigenentwicklung** → kann **MIT** sein. Empfehlung: neues Repo **MIT**,
@@ -140,7 +146,7 @@ Tokens. (`.gitignore` blockt das bereits.)
 bambu-spoolman-bridge/
 ├── app/  web/  scripts/  docs/  analysis/
 ├── Dockerfile  docker-compose.yml  requirements.txt  config.example.yaml
-├── LICENSE (MIT)  README.md (aus tools/.../README.md + HANDOVER-Auszug)
+├── LICENSE (MIT)  README.md (aus README.md + HANDOVER-Auszug)
 ```
 
 ---
@@ -186,7 +192,7 @@ Filament `filament_id`,`type`,`nozzle_temperature`.
 
 ## 11. Datei-Inventar (Stand Übergabe)
 
-- **Tool:** `tools/bambu-spoolman-bridge/` — 17 `app/*.py`, 5 `scripts/*.py`, 4 `web/*`, Docker,
+- **Tool:** `` — 17 `app/*.py`, 5 `scripts/*.py`, 4 `web/*`, Docker,
   compose, requirements, config.example, README, .gitignore.
 - **Docs:** `docs/` — HANDOVER, api-guideline, database-guideline, bambu-spoolman-bridge-concept,
   filament-cloud-api-analysis-spec, filament-preset-db-concept, esp32-slot-selector-concept,

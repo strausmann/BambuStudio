@@ -452,7 +452,7 @@ Bestätigte (Export-)API-Oberfläche, u. a.:
    aufwändigsten, Windows-gebunden.
 
 → Für unser Vorhaben: **Weg 1 (mitmproxy)**; der `file`-Modus des Cloud-Importers
-(`tools/bambu-spoolman-bridge`) testet das Mapping dann gegen den Capture, bevor der Pfad fix ist.
+(`bambu-spoolman-bridge`) testet das Mapping dann gegen den Capture, bevor der Pfad fix ist.
 
 ### 5.3 Methodik-Präzedenz: so hat `ClusterM/open-bambu-networking` es gemacht
 

@@ -92,7 +92,7 @@ Minimal für ein neues Vendor-Filament:
 - **Idempotent:** Presets über `name`/`filament_id` erkennen; Spoolman über vorhandene Felder.
 - **Online-Feed:** Katalog als versioniertes JSON-Repo (einfach, diffbar, PR-fähig) — bei Bedarf
   später ein kleiner FastAPI-Service mit `/catalog`-Endpoint.
-- **Wiederverwendung:** baut auf der bestehenden `tools/bambu-spoolman-bridge` auf (gleicher
+- **Wiederverwendung:** baut auf der bestehenden `bambu-spoolman-bridge` auf (gleicher
   Spoolman-Client, gleiche Docker-Logik).
 
 ## 5. Schema der eigenen DB (Seed liegt schon vor)
@@ -119,7 +119,7 @@ Display das passende Filament wählen).
 
 ## 7. Tool-UX: Hersteller + Typ wählen → anlegen
 
-Geplanter Ablauf im Tool (baut auf `tools/bambu-spoolman-bridge` auf):
+Geplanter Ablauf im Tool (baut auf `bambu-spoolman-bridge` auf):
 1. **Auswahl:** Hersteller (eSUN, Polymaker, …) + Typ (PLA/PETG/…) — Quelle: **SpoolmanDB**
    (Spoolman-Filamente) **+** unser `catalog.json` (Bambu `filament_id` + Flow/Temps fürs Preset).
 2. **Anlegen:**

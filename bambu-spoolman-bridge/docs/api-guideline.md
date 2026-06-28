@@ -1,7 +1,7 @@
 # API Guideline — Bambu ↔ Spoolman Bridge (Single Source of Truth)
 
 > **Zweck:** Verbindlicher Standard für die HTTP-API, die Feldnamen, die Spoolman-Extra-Fields,
-> die Config-Keys und die Konventionen der Bridge (`tools/bambu-spoolman-bridge`) **und** der
+> die Config-Keys und die Konventionen der Bridge (`bambu-spoolman-bridge`) **und** der
 > Clients (PWA, ESP32). Jede Teilentwicklung MUSS sich hieran halten — keine ad-hoc-Namen,
 > -Endpoints oder -Annahmen mehr. Änderungen an dieser Datei laufen über Review (siehe Issue).
 >

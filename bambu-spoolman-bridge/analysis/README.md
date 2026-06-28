@@ -15,7 +15,7 @@ it must be **sanitized — schema/structure only, never data**.
 `.gitignore` here blocks those patterns defensively — do not override it.
 
 **DO commit (sanitized):**
-- `endpoints.schema.json` — produced by `tools/bambu-spoolman-bridge/scripts/redact_flows.py`
+- `endpoints.schema.json` — produced by `scripts/redact_flows.py`
   (every leaf value reduced to `<string>/<int>/<float>/<bool>` — no real values).
 - `ENDPOINTS.md` — the human-readable findings (method · host · path · status + notes).
 
@@ -23,7 +23,7 @@ it must be **sanitized — schema/structure only, never data**.
 
 1. **VM session** captures (see `docs/capture-runbook.md`), then:
    ```bash
-   python3 tools/bambu-spoolman-bridge/scripts/redact_flows.py \
+   python3 scripts/redact_flows.py \
        ~/capture/captures/bambu_flows.jsonl -o analysis/endpoints.schema.json
    # fill in analysis/ENDPOINTS.md (paths confirmed, anomalies, status codes)
    git add analysis/endpoints.schema.json analysis/ENDPOINTS.md

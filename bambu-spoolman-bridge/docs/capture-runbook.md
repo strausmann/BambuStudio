@@ -3,7 +3,7 @@
 > **Für die Claude-Code-Instanz auf der Ubuntu-VM.** Dieses Dokument ist **eigenständig** —
 > du brauchst keinen Vorkontext. Ziel: den **Cloud-Endpoint der Bambu-Filament-Bibliothek**
 > (Host + Pfad + Request/Response-Body) aufzeichnen, damit der Importer in
-> `tools/bambu-spoolman-bridge` „scharf" gestellt werden kann.
+> `bambu-spoolman-bridge` „scharf" gestellt werden kann.
 >
 > **Rollen:** Schritte mit **[AGENT]** führst du (Claude Code) per Shell aus. Schritte mit
 > **[MENSCH]** muss der Nutzer in der GUI klicken — fordere ihn dann klar dazu auf und warte.
@@ -25,9 +25,9 @@
 sudo apt update
 sudo apt install -y pipx git curl libfuse2 jq
 pipx install mitmproxy || python3 -m pip install --user mitmproxy
-# Repo mit dem Tool + Capture-Addon holen (Branch mit der Bridge):
-git clone -b claude/dazzling-sagan-vdro2v <DEIN_REPO_REMOTE> ~/bambu || true
-ls ~/bambu/tools/bambu-spoolman-bridge/scripts/mitm_bambu_addon.py
+# Eigenständiges Bridge-Repo holen (Tool + docs + analysis liegen im Repo-Root):
+git clone <DEIN_REPO_REMOTE> ~/bridge || true
+ls ~/bridge/scripts/mitm_bambu_addon.py
 mkdir -p ~/capture/captures
 ```
 > Falls kein Repo-Remote vorhanden: die Datei `mitm_bambu_addon.py` ist klein — notfalls aus
@@ -82,7 +82,7 @@ Zwei Terminals (oder tmux):
 cd ~/capture
 BAMBU_CAPTURE_DIR=~/capture/captures \
   mitmweb --listen-port 8080 --web-host 127.0.0.1 \
-          -s ~/bambu/tools/bambu-spoolman-bridge/scripts/mitm_bambu_addon.py
+          -s ~/bridge/scripts/mitm_bambu_addon.py
 ```
 ```bash
 # Terminal B — Studio MIT Proxy-Env starten (libcurl des Plugins beachtet die Variablen):
@@ -116,7 +116,7 @@ Den **Host + vollständigen Pfad** des Filament-`GET` notieren (Hypothese war
 ## 8. [AGENT] Importer testen (ohne Live-Call) + Endpoint eintragen
 
 ```bash
-cd ~/bambu/tools/bambu-spoolman-bridge
+cd ~/bridge
 # a) Mapping gegen die echte Antwort testen (kein Token nötig):
 #    erst Spoolman-URL/Felder in data/config.yaml setzen (siehe config.example.yaml)
 curl -s -X POST localhost:8099/api/cloud/import \
@@ -134,9 +134,9 @@ Der Austausch mit der Design-Session läuft ausschließlich über den Ordner `an
 `analysis/.gitignore` blockt das defensiv.
 
 ```bash
-cd ~/bambu
+cd ~/bridge
 # Rohflows -> reines Schema (jeder Wert -> <string>/<int>/… ; keine echten Werte):
-python3 tools/bambu-spoolman-bridge/scripts/redact_flows.py \
+python3 scripts/redact_flows.py \
     ~/capture/captures/bambu_flows.jsonl -o analysis/endpoints.schema.json
 # analysis/ENDPOINTS.md ausfüllen (Host, Pfade, Query-Keys, Status, Auffälligkeiten — in Worten)
 git add analysis/endpoints.schema.json analysis/ENDPOINTS.md
