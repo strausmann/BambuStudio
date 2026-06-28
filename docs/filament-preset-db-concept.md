@@ -20,9 +20,14 @@ Klipper-/Generic-Workflows ins Preset schreiben. Im Bambu-AMS sahen wir `cali_id
 
 ## 2. Gibt es schon Datenbanken? — Ja, mehrere
 
-- **BambuStudio-Bundle (DIESES Repo):** `resources/profiles/<Vendor>/filament/*.json`, via
-  `inherits` verkettet. Bereits **1927 Presets / 6 Vendors** (Bambu Lab, Generic, Overture,
-  Polymaker, QIDI, eSUN) → extrahiert von `scripts/build_catalog.py` nach `catalog.json`.
+- **BambuStudio-Bundle (DIESES Repo):** `resources/profiles/<Vendor>/filament/*.json` (2122
+  Dateien), via `inherits` verkettet → `scripts/build_catalog.py` ergab **1927 Katalog-Einträge**.
+  - **Achtung:** Das ist **inkl. Düsen-/Drucker-Varianten** (z. B. „Bambu PLA Basic @BBL A1",
+    „… @BBL A1 0.2 nozzle", „… @BBL H2C" zählen einzeln) → **nicht** 1927 distinkte Filamente.
+  - `filament_vendor`-Verteilung: **Bambu Lab 1095, QIDI 640, Generic 85, Polymaker 64,
+    Overture 30, eSUN 13**. (Verzeichnisnamen wie Anker/Creality/Elegoo/Prusa ≠ `filament_vendor`;
+    deren Profile sind meist Maschinen-/Prozess-Profile bzw. erben Vendor „Bambu Lab"/„Generic".)
+  - **OrcaSlicer-Repo** deckt deutlich **mehr echte Hersteller** ab → besserer Seed für Vendor-Breite.
 - **OrcaSlicer-Profile** (`SoftFever/OrcaSlicer`, `resources/profiles/`): die **größte offene**
   Preset-DB (viele weitere Vendor + Generic) — idealer zusätzlicher Seed.
 - **Bambu-Cloud filament-config** (`get_filament_config`): Marken-/Typ-**Katalog** des Kontos
