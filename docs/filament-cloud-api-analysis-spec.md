@@ -476,6 +476,13 @@ ohne Verlust der Bambu-Cloud.
 Filament-Spool-Endpoints (02.06+, bei ihnen „out of scope") → den Filament-Pfad capturen wir
 selbst, aber mit dieser validierten Methode.
 
+**Testumgebung NICHT publiziert:** Sie nennen das Proxy-Tool, explizit/transparent, das
+CA-/Cert-Handling, OS und Routing **nicht** (nur „MITM gegen api.bambulab.com" + Hardware
+P2S/N7 im Developer Mode für die Drucker-Signatur). → **Unser `docs/capture-runbook.md` +
+`§3.3`/`§3.4` füllen genau diese Lücke** reproduzierbar; der Schlüssel (CA an
+`resources/cert/slicer_base64.cer` anhängen) ist aus dem offenen Code (`set_cert_file`,
+`GUI_App.cpp:3629`) abgeleitet, nicht geraten.
+
 ---
 
 ## 6. Troubleshooting / bekannte Fallstricke
