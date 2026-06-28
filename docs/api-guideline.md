@@ -112,13 +112,22 @@ Bambu-Protokoll-Feldnamen (`tray_info_idx`, `tray_type`, `tray_color`, `cols`, `
   vendor+material+color) und **überspringen** statt zu duplizieren; bieten `dry_run`.
 - Lang laufende Importe serialisieren (kein paralleles Doppel-Anlegen).
 
-## 8. Authentifizierung
+## 8. Authentifizierung & Deployment-Profile
 
-- **Alle mutierenden** Endpoints (POST/PUT/PATCH/DELETE) erfordern den Header
-  **`X-API-Key: <key>`**. Lese-Endpoints SOLLTEN ihn ebenfalls verlangen (konfigurierbar).
-- Key kommt aus `config.yaml` (`security.api_key`) oder Env `BRIDGE_API_KEY`.
-- Fehlt/falsch → **401** `{"detail":"unauthorized","error_code":"unauthorized"}`.
-- Der API-Key ist **kein** Ersatz für den HTTPS-Proxy (§9), sondern Ergänzung.
+- **`X-API-Key: <key>`** auf allen mutierenden Endpoints; Lese-Endpoints konfigurierbar.
+- Key aus `config.yaml` (`security.api_key`) oder Env `BRIDGE_API_KEY`. Fehlt/falsch → **401**
+  `{"detail":"unauthorized","error_code":"unauthorized"}`.
+- API-Key wird **deaktiviert**, wenn kein Key konfiguriert ist (Profil „HomeLab", s. u.) — die
+  Bridge logt dann eine Warnung.
+
+**Deployment-Profile (Entscheidung):**
+| Profil | Schutz | API-Key |
+|--------|--------|---------|
+| **HomeLab** | strikt **hinter Reverse-Proxy** (Pangolin/Traefik/Caddy/NPM), nicht direkt erreichbar | optional (weniger kritisch) |
+| **Druckwerkstatt / geteiltes Netz** | **API-Key** definieren **und/oder** Pangolin mit **SSO** | erforderlich |
+
+→ Default-Empfehlung: Key setzen, sobald die Bridge über das reine HomeLab hinaus erreichbar ist.
+Der API-Key ist **kein** Ersatz für den HTTPS-Proxy (§9), sondern Ergänzung.
 
 ## 9. Transport / HTTPS (Pflicht)
 
