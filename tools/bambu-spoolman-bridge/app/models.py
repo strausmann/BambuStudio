@@ -73,6 +73,7 @@ class Tray:
     remain: int = -1           # remaining percent (0-100), -1 = unknown
     tray_weight: float = 0.0   # nominal full weight (g)
     diameter: float = 1.75
+    cali_idx: int = -1         # index into the printer's PA/k calibration table (-1 = none)
     nozzle_temp_min: int = 0
     nozzle_temp_max: int = 0
 

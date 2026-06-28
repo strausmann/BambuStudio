@@ -32,10 +32,14 @@ Klipper-/Generic-Workflows ins Preset schreiben. Im Bambu-AMS sahen wir `cali_id
   Preset-DB (viele weitere Vendor + Generic) — idealer zusätzlicher Seed.
 - **Bambu-Cloud filament-config** (`get_filament_config`): Marken-/Typ-**Katalog** des Kontos
   (was der Filament Manager zeigt).
-- **Spoolman:** **Inventar**-DB (Vendor/Material/Dichte/Durchmesser/Farbe/Temps + Extra-Fields) —
-  **keine** Slicer-Presets, aber hier tracken wir die physischen Spulen und können den **k als
-  Extra-Field** ablegen.
-- Community: `filamentcolors.xyz` (Farben), OpenTag (Tag-Spec/DB) — kein Preset/k-Fokus.
+- **SpoolmanDB (Online-DB für Spoolman):** `Donkie/SpoolmanDB`
+  (https://donkie.github.io/SpoolmanDB/) — zentrale Hersteller-/Filament-DB im Spoolman-Format.
+  Dazu gibt es einen **fertigen Docker-Importer** `fwartner/spoolman-importer`, der Vendors +
+  Filamente daraus in deine Spoolman-Instanz anlegt. → **Für die Spoolman-Seite nichts neu bauen:
+  SpoolmanDB + Importer nutzen.** (Bestätigt — der Nutzer lag richtig.)
+- **Spoolman selbst:** Inventar-DB; speichert pro Filament Vendor/Material/Dichte/Durchmesser/
+  Farbe/Temps + **Extra-Fields** (dort legen wir `k_value`/`cali_idx` ab).
+- Community: `filamentcolors.xyz` (Farben), OpenTag (Tag-Spec/DB), `filaman.app` — kein k-Fokus.
 
 > Eine **einzige** maßgebliche „Online-DB mit K-Werten pro Vendor" gibt es nicht — weil k
 > drucker-/düsenspezifisch ist. OrcaSlicer-Repo ist die beste Preset-Basis; die k-Ebene bauen
@@ -100,11 +104,45 @@ max_vol_speed, color_hex, k_value(null→eigene Kalibrierung)`.
 → **Erweitern um:** `color_name`, mehrere `k_value` pro Düse (0.2/0.4/0.6/0.8), `source`,
 `verified`, `notes`. Damit ist die DB sofort nutzbar und wächst mit deinen Kalibrierungen.
 
-## 6. Status / nächste Schritte
+## 6. Erscheinen die Filamente im Drucker-Display (AMS-Slot-Auswahl)?
 
-- [x] Seed-Katalog aus Repo-Profilen (`build_catalog.py`, 1927 Presets).
+**Ja** — die Filamentliste, die der Drucker bei der AMS-Slot-Zuordnung am **Display** zeigt, ist
+die **vom Bambu-Konto synchronisierte** Preset-Liste (Bambu-System-Presets + deine **User-Presets**).
+Sobald ein Dritthersteller-Preset als **User-Preset im Konto** liegt, taucht es dort (unter
+„Custom"/Benutzer) auf und ist auswählbar — genau für deinen Workflow (Fremdspule einlegen → am
+Display das passende Filament wählen).
+
+- **Zuverlässiger Weg:** in Bambu Studio als User-Preset speichern → Auto-Cloud-Sync → Display.
+- **Automatisierbar:** per `put_setting`-API (Endpoint via Capture bestätigen).
+- Hinweis: RFID-Auto-Erkennung bleibt Bambu-Spulen vorbehalten; Fremdfilament wählst du aus der
+  (jetzt größeren) Liste manuell.
+
+## 7. Tool-UX: Hersteller + Typ wählen → anlegen
+
+Geplanter Ablauf im Tool (baut auf `tools/bambu-spoolman-bridge` auf):
+1. **Auswahl:** Hersteller (eSUN, Polymaker, …) + Typ (PLA/PETG/…) — Quelle: **SpoolmanDB**
+   (Spoolman-Filamente) **+** unser `catalog.json` (Bambu `filament_id` + Flow/Temps fürs Preset).
+2. **Anlegen:**
+   - **Spoolman-Filamente** via SpoolmanDB/`spoolman-importer` bzw. Spoolman-REST.
+   - **Bambu-Preset** (für Display) aus `catalog.json` generieren → Studio-Import / `put_setting`.
+3. **Verwenden:** Fremdspule onboarden (RFID-Bind/QR) → Spool referenziert die richtige Sorte.
+
+## 8. cali_idx / k-Wert überwachen — **implementiert (Basis)**
+
+Die Bridge liest `cali_idx` jetzt pro AMS-Tray aus dem MQTT-Stream (`models.Tray.cali_idx`) und
+schreibt bei Änderung in die Spoolman-Spule die Extra-Felder **`cali_idx`** und **`calibrated`**
+(true, wenn `cali_idx >= 0`). So siehst du je Spule, **ob eine k-Kalibrierung am Drucker
+hinterlegt ist**.
+- **Noch offen:** den konkreten **k-Wert** auslesen/setzen (Drucker-PA-Tabelle via
+  `command_get_pa_calibration_tab` / `..._set` — MQTT) und in der Katalog-DB pro (Vendor/Typ/Düse)
+  pflegen.
+
+## 9. Status / nächste Schritte
+
+- [x] Seed-Katalog aus Repo-Profilen (`build_catalog.py`, 1927 Einträge).
+- [x] `cali_idx`-Tracking pro Spule → Spoolman-Extra `cali_idx`/`calibrated` (Bridge).
+- [ ] Spoolman-Anlage nach Hersteller/Typ über **SpoolmanDB + `spoolman-importer`** (kein Eigenbau).
 - [ ] OrcaSlicer-Profile als zusätzlichen Seed einlesen (mehr Vendor).
-- [ ] k-/Farb-Ebene + Schema-Erweiterung.
-- [ ] Preset-Generator (Katalog-Eintrag → Bambu/Orca-JSON).
-- [ ] `put_setting`-Endpoint per Capture bestätigen (Spec) → Push ins Konto.
-- [ ] Spoolman-Anlage aus Katalog (Material/Temps/k).
+- [ ] Preset-Generator (Katalog-Eintrag → Bambu/Orca-JSON) für Display/Konto.
+- [ ] `put_setting`-Endpoint per Capture bestätigen (Spec) → Preset-Push ins Konto.
+- [ ] konkreten **k-Wert** aus Drucker-PA-Tabelle lesen/setzen (MQTT) + im Katalog pflegen.

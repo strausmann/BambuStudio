@@ -83,6 +83,8 @@ class Bridge:
 
         # in-memory onboarding queue: tag_uid -> tray snapshot
         self._pending: dict[str, dict[str, Any]] = {}
+        # last cali_idx written per tag, so we only push on change
+        self._last_cali: dict[str, int] = {}
         # AMS identity learned from get_version: (serial, ams_id) -> {type, sn}
         self.ams_identity: dict[tuple[str, int], dict[str, str]] = {}
         self._lock = threading.Lock()
@@ -166,6 +168,16 @@ class Bridge:
             self.spoolman.set_location(spool_id, slot)             # Spoolman native location (Lagerort)
         except Exception:  # noqa: BLE001
             log.exception("set location failed for spool %s", spool_id)
+        # Track the printer's PA/k calibration link: cali_idx >= 0 means this
+        # filament has a stored k-calibration on the printer (concept §1 preset-db).
+        if tray.cali_idx != self._last_cali.get(tray.tag_uid):
+            self._last_cali[tray.tag_uid] = tray.cali_idx
+            try:
+                self.spoolman.set_extra(spool_id, cali_idx=tray.cali_idx,
+                                        calibrated=(tray.cali_idx >= 0))
+            except Exception:  # noqa: BLE001
+                log.exception("set cali_idx failed for spool %s", spool_id)
+
         self.consumption.reconcile_remaining(spool_id, tray, spool=spool)
 
     def _clear_slot_for_tag(self, tag_uid: str) -> None:
