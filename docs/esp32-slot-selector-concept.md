@@ -20,12 +20,23 @@ sprechen nur **REST** mit der Bridge. Damit braucht der ESP32 keine Bambu-Creden
 
 ## 2. ESP32-Screens
 
-1. **Drucker-Auswahl** (nur wenn >1 Drucker) — `GET /api/printers`.
-2. **AMS-Auswahl** — `GET /api/printers/{serial}/ams` → Liste der AMS (mit sprechendem Namen,
-   z. B. „AMS 2 Pro (1234)").
-3. **Slot-Gitter** — pro AMS die Slots 1–4 mit Belegung (Material/Farbe/Restprozent, leer/voll).
-4. **Slot-Detail** — zeigt **QR-Code** + Infozeilen *(Drucker, AMS, Slot)* + Buttons **Zurück** /
-   **Home** + **Unload**.
+1. **Drucker** — `GET /api/printers`. **Bei genau einem Drucker (oder nach Auswahl) ist dieser
+   dauerhaft vorausgewählt** → der Screen wird übersprungen und führt direkt zu den AMS.
+2. **AMS-Auswahl** — `GET /api/printers/{serial}/ams` → Liste der AMS (sprechender Name, z. B.
+   „AMS 2 Pro (1234)"). **Info-Badge**, wenn ein AMS einen Slot mit **belegtem, aber nicht
+   zugeordnetem** Filament hat (`attention=true`, `unassigned_count>0`).
+3. **Slot-Gitter** — Slots 1–4 mit Belegung (Material/Farbe/Restprozent). Slots mit
+   `needs_attention=true` (belegt, aber **kein Profil** `needs_profile` **oder nicht in Spoolman
+   getrackt** `tracked=false`) werden **markiert** → das sind die, die Zuordnung brauchen.
+4. **Slot-Detail** — zwei Wege:
+   - **Filament/Hersteller direkt am Gerät wählen** (Schnell-Zuordnung nach Sorte — Quelle
+     SpoolmanDB/Katalog), **oder**
+   - **Slot-QR anzeigen** (+ Infozeilen Drucker/AMS/Slot) → mit der **Bridge-PWA scannen** und
+     anschließend die **konkrete Spule** scannen (präzise, pro physischer Rolle).
+   - Buttons **Zurück** / **Home** / **Unload**.
+
+> **Badge-Logik** kommt fertig aus `GET /api/printers/{serial}/ams`: pro Slot `occupied`,
+> `needs_profile`, `tracked`, `needs_attention`; pro AMS `attention` + `unassigned_count`.
 
 ## 3. QR-Payload (Slot)
 

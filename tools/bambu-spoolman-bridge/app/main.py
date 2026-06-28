@@ -410,19 +410,36 @@ class Bridge:
         return out
 
     def ams_view(self, serial: str) -> dict[str, Any]:
-        """AMS + slots with current occupancy for one printer (from live MQTT)."""
+        """AMS + slots with occupancy for one printer (from live MQTT).
+
+        Flags per slot for the ESP32 info badge:
+          occupied        - a filament is present
+          needs_profile   - occupied but the printer has no filament profile (no setting_id)
+          tracked         - mapped to a Spoolman spool in the bridge
+          needs_attention - occupied AND (no profile OR not tracked) -> show the badge
+        """
         ams: dict[int, dict] = {}
         for (s, ams_id, tray_id), t in self.live_trays.items():
             if s != serial:
                 continue
             ident = self.ams_identity.get((s, ams_id), {})
             a = ams.setdefault(ams_id, {"ams_id": ams_id, "name": self._ams_name(t),
-                                        "type": ident.get("type", "AMS"), "slots": []})
+                                        "type": ident.get("type", "AMS"), "slots": [],
+                                        "attention": False, "unassigned_count": 0})
+            occupied = t.has_rfid or bool(t.setting_id)
+            spool_id = self.db.get_spool_by_tag(t.tag_uid) if t.has_rfid else None
+            needs_profile = occupied and not t.setting_id
+            tracked = spool_id is not None
+            needs_attention = occupied and (needs_profile or not tracked)
+            if needs_attention:
+                a["attention"] = True
+                a["unassigned_count"] += 1
             a["slots"].append({
-                "tray_id": tray_id, "occupied": t.has_rfid or bool(t.setting_id),
+                "tray_id": tray_id, "occupied": occupied,
                 "tag_uid": t.tag_uid if t.has_rfid else "", "material": t.material,
-                "color": t.color, "remain": t.remain,
-                "spool_id": self.db.get_spool_by_tag(t.tag_uid) if t.has_rfid else None,
+                "color": t.color, "remain": t.remain, "spool_id": spool_id,
+                "needs_profile": needs_profile, "tracked": tracked,
+                "needs_attention": needs_attention,
             })
         for a in ams.values():
             a["slots"].sort(key=lambda x: x["tray_id"])
