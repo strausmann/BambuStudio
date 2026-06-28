@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Projekt-Doku
+    url: https://example.invalid/docs
+    about: Siehe docs/ (HANDOVER, api-guideline, database-guideline, backlog)
