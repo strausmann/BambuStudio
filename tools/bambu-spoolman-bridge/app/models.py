@@ -74,6 +74,8 @@ class Tray:
     tray_weight: float = 0.0   # nominal full weight (g)
     diameter: float = 1.75
     cali_idx: int = -1         # index into the printer's PA/k calibration table (-1 = none)
+    k: float = -1.0            # pressure-advance k for this tray (from push_status; -1 = unknown)
+    n: float = -1.0            # PA n coefficient (-1 = unknown)
     nozzle_temp_min: int = 0
     nozzle_temp_max: int = 0
 

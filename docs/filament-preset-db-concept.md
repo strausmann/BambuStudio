@@ -127,15 +127,27 @@ Geplanter Ablauf im Tool (baut auf `tools/bambu-spoolman-bridge` auf):
    - **Bambu-Preset** (für Display) aus `catalog.json` generieren → Studio-Import / `put_setting`.
 3. **Verwenden:** Fremdspule onboarden (RFID-Bind/QR) → Spool referenziert die richtige Sorte.
 
-## 8. cali_idx / k-Wert überwachen — **implementiert (Basis)**
+## 8. cali_idx / k-Wert überwachen — **k-Lesen implementiert**
 
-Die Bridge liest `cali_idx` jetzt pro AMS-Tray aus dem MQTT-Stream (`models.Tray.cali_idx`) und
-schreibt bei Änderung in die Spoolman-Spule die Extra-Felder **`cali_idx`** und **`calibrated`**
-(true, wenn `cali_idx >= 0`). So siehst du je Spule, **ob eine k-Kalibrierung am Drucker
-hinterlegt ist**.
-- **Noch offen:** den konkreten **k-Wert** auslesen/setzen (Drucker-PA-Tabelle via
-  `command_get_pa_calibration_tab` / `..._set` — MQTT) und in der Katalog-DB pro (Vendor/Typ/Düse)
-  pflegen.
+**Wichtiger Fund:** Der AMS-Tray liefert im `push_status` nicht nur `cali_idx`, sondern **`k` und
+`n` direkt** (`DeviceManager.cpp:4097`). Lesen ist also fast geschenkt — kein Extra-Request nötig.
+
+Die Bridge liest jetzt pro Tray **`cali_idx`, `k`, `n`** und schreibt bei Änderung in die
+Spoolman-Spule die Extra-Felder **`cali_idx`**, **`calibrated`**, **`k_value`**, **`n_coef`**.
+So siehst du je geladener Spule den **echten k-Wert** und ob am Drucker kalibriert ist.
+
+**Was davon ist „offen"? — präzise:**
+- ✅ **k der geladenen Spule lesen** — erledigt (aus dem Tray).
+- ⛔ **Volle PA-Tabelle lesen** (auch für *nicht* geladene Filamente): braucht den Request
+  `extrusion_cali_get` + Parsen der Async-Antwort `extrusion_cali_get_result` — **noch nicht
+  implementiert** (optional; nur nötig, wenn man die ganze Tabelle will, nicht nur Geladenes).
+- ⛔ **k *setzen*/schreiben** vom Tool: Payload ist bekannt (`extrusion_cali_set` mit `k_value`,
+  `n_coef` — Bambu fixiert `n=1.4`; bzw. Batch `command_set_pa_calibration`) — **nicht
+  implementiert**; Schreibpfad ggf. **LAN/Developer-Mode-abhängig** (beim Capture verifizieren),
+  und überschreibt aktiv die Drucker-Kalibrierung → vorsichtiger als Lesen.
+- ⛔ **k in der Katalog-DB pflegen** pro (Vendor/Typ/Düse): `catalog.json` hat noch `k_value=null`;
+  ein Mechanismus „beobachtetes k aus Spoolman → Katalog zurückschreiben" fehlt.
+- ℹ️ **n** wird von Bambu beim Setzen fix auf **1.4** gesetzt (nicht frei) — relevant fürs Schreiben.
 
 ### 8.1 Prozess: cali_idx / k-Wert am Drucker erstellen (Flow Dynamics / Pressure Advance)
 
@@ -193,7 +205,7 @@ hinterlegt ist**.
 ## 10. Status / nächste Schritte
 
 - [x] Seed-Katalog aus Repo-Profilen (`build_catalog.py`, 1927 Einträge).
-- [x] `cali_idx`-Tracking pro Spule → Spoolman-Extra `cali_idx`/`calibrated` (Bridge).
+- [x] k/cali-Tracking pro Spule → Spoolman-Extra `cali_idx`/`calibrated`/`k_value`/`n_coef` (aus MQTT-Tray).
 - [ ] Spoolman-Anlage nach Hersteller/Typ über **SpoolmanDB + `spoolman-importer`** (kein Eigenbau).
 - [ ] OrcaSlicer-Profile als zusätzlichen Seed einlesen (mehr Vendor).
 - [ ] Preset-Generator (Katalog-Eintrag → Bambu/Orca-JSON) für Display/Konto.

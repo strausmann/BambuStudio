@@ -168,15 +168,22 @@ class Bridge:
             self.spoolman.set_location(spool_id, slot)             # Spoolman native location (Lagerort)
         except Exception:  # noqa: BLE001
             log.exception("set location failed for spool %s", spool_id)
-        # Track the printer's PA/k calibration link: cali_idx >= 0 means this
-        # filament has a stored k-calibration on the printer (concept §1 preset-db).
-        if tray.cali_idx != self._last_cali.get(tray.tag_uid):
-            self._last_cali[tray.tag_uid] = tray.cali_idx
+        # Track the printer's PA/k calibration: cali_idx links to the printer's PA
+        # table; the actual k/n come straight from the tray push_status (concept §8.1).
+        k = round(tray.k, 4) if tray.k > 0 else None
+        sig = (tray.cali_idx, k)
+        if sig != self._last_cali.get(tray.tag_uid):
+            self._last_cali[tray.tag_uid] = sig
+            extra: dict[str, Any] = {"cali_idx": tray.cali_idx,
+                                     "calibrated": (tray.cali_idx >= 0 or (k or 0) > 0)}
+            if k:
+                extra["k_value"] = k
+            if tray.n > 0:
+                extra["n_coef"] = round(tray.n, 4)
             try:
-                self.spoolman.set_extra(spool_id, cali_idx=tray.cali_idx,
-                                        calibrated=(tray.cali_idx >= 0))
+                self.spoolman.set_extra(spool_id, **extra)
             except Exception:  # noqa: BLE001
-                log.exception("set cali_idx failed for spool %s", spool_id)
+                log.exception("set k/cali failed for spool %s", spool_id)
 
         self.consumption.reconcile_remaining(spool_id, tray, spool=spool)
 
