@@ -131,6 +131,31 @@ das ist das Gerüst, in das die Filament-Pfade nur noch eingehängt werden müss
 > **Kernaussage:** Host, Präfix und Auth sind erledigt. Offen — und Ziel des Captures —
 > bleiben nur die exakten Filament-/Spool-/RFID-**Pfade** und die realen Request/Response-Bodies.
 
+### 1.6 Verwandt: Filament-**Profile** (Presets) → Bambu-Konto (User-Preset-Sync)
+
+Wichtige Abgrenzung — es gibt **zwei** Ebenen:
+
+1. **Filament-Profil / Slicer-Preset** (Druck-/Temperatur-Einstellungen je Filament) — landet im
+   Konto über den **User-Preset-Sync**. Belegte Plugin-Exports:
+   `get_user_presets`, `get_setting_list`/`get_setting_list2`, `put_setting`, `delete_setting`,
+   `request_setting_id`. Community-bekannte Route-Familie:
+   `GET /v1/iot-service/api/slicer/setting`, `…/setting/<setting_id>`, plus create/update/delete.
+2. **Filament-Bibliothek / Spool-Inventar** (Filament Manager, `/my/filament/v2`) — die Spulen,
+   die je ein `filamentId` (= Preset/Setting-ID) referenzieren (§1.2/§1.3).
+
+**Drittanbieter-Profile ins Konto bekommen — empfohlener (supporteter) Weg, ohne RE:**
+- In **Bambu Studio** das Filament-Profil anlegen/importieren (z. B. „Create Filament" oder
+  Community-/OrcaSlicer-Vendor-Profile) → als **User-Preset** speichern.
+- Eingeloggt synchronisiert Studio **User-Presets automatisch** in die Cloud → erscheinen im
+  Konto und in der Filament-Auswahl (auch am Drucker). Kein direkter API-Aufruf nötig.
+
+**Per API (`put_setting`):** möglich, aber gleiche Packing-Hürde — Endpoint/Schema erst per
+Capture bestätigen. Der Body wickelt das Setting-JSON + Metadaten (setting_id, name, base_id,
+version, nozzle, filament_id …). Nur sinnvoll für Bulk/Automatisierung.
+
+> **Reihenfolge:** Erst Profile importieren (liefert gültige `filamentId`/`setting_id`), dann
+> referenzieren die Spool-Datensätze (Inventar) genau diese IDs.
+
 ---
 
 ## 2. Ziel der Analyse-Session (Deliverables)
@@ -209,6 +234,41 @@ docker run --rm -it \
    `HTTPS_PROXY=http://<ubuntu-ip>:8080` / `HTTP_PROXY=...` testen oder
    Proxifier einsetzen.)*
 4. Bambu Studio **neu starten**, damit Proxy + CA greifen.
+
+### 3.3 Windows-All-in-One-Schnellanleitung (mitmproxy direkt) + **Cert-Bundle-Trick**
+
+Schneller Weg ohne separaten Linux-Host — alles auf dem Windows-Client:
+
+1. **mitmproxy installieren:** Windows-Installer von mitmproxy.org **oder** `pip install mitmproxy`.
+   Starten: `mitmweb --listen-port 8080` (Web-UI auf `http://127.0.0.1:8081`). Beim 1. Start wird
+   `%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.pem` erzeugt.
+2. **Proxy für Bambu Studio** (zwei Ebenen, am besten beide):
+   - System-Proxy: Einstellungen → Netzwerk → Proxy → manuell `127.0.0.1:8080`.
+   - Umgebungsvariablen vor dem Start (der Plugin-libcurl beachtet sie):
+     `setx HTTPS_PROXY http://127.0.0.1:8080` und `setx HTTP_PROXY http://127.0.0.1:8080`
+     (neue Shell/Studio-Neustart nötig).
+3. **★ Cert-Bundle-Trick (entscheidend):** Das Netzwerk-Plugin prüft Cloud-TLS **nicht** über den
+   Windows-Speicher, sondern gegen die mitgelieferte Bundle-Datei
+   `…\Bambu Studio\resources\cert\slicer_base64.cer` (PEM; gesetzt via `set_cert_file`,
+   Quelle `GUI_App.cpp:3629`).
+   → **mitmproxy-CA dort anhängen:**
+   - Datei sichern: `copy slicer_base64.cer slicer_base64.cer.bak`
+   - Inhalt von `mitmproxy-ca-cert.pem` **ans Ende** von `slicer_base64.cer` kopieren
+     (bestehende Zertifikate behalten, unseren PEM-Block einfach anfügen).
+   - Zusätzlich die CA in den Windows-Speicher „Vertrauenswürdige Stammzertifizierungsstellen"
+     (Lokaler Computer) importieren — schadet nicht.
+4. **Bambu Studio neu starten**, **einloggen**, **Filament Manager öffnen + Sync auslösen**
+   (Spule hinzufügen/bearbeiten → Filament-API wird wirklich angesprochen).
+5. In **mitmweb** filtern: `~d bambulab` bzw. nach „filament" suchen. Pro Flow erfassen: Methode,
+   Host, Pfad, Header (`Authorization: Bearer …`), Body, Response. Flow speichern; die JSON-Antwort
+   der Filament-Liste exportieren → in den Importer (`file`-Modus) geben.
+
+**Wenn trotzdem kein Bambu-Traffic / TLS-Fehler im Studio-Log:**
+- Prüfen, ob der Bundle-Trick griff (richtige `resources`-Pfad? bei Per-User-Install unter
+  `%LOCALAPPDATA%\Programs\…`). Datei-Encoding beim Anhängen als reines ASCII/UTF-8 ohne BOM halten.
+- Bleibt es bei Handshake-Fehlern → echtes **Public-Key-Pinning** möglich; dann auf den
+  **Memory-Dump-Weg** (§5.2) ausweichen. MQTT (Port 8883) geht ohnehin nicht über den HTTP-Proxy —
+  für den Filament-**REST**-Endpoint aber irrelevant.
 
 ---
 
