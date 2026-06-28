@@ -299,6 +299,60 @@ Statisch ist also nichts gewonnen, **dynamisch aber deutlich mehr möglich:**
   `strace`/`SSLKEYLOGFILE`/`LD_PRELOAD`/`gcore` machen die Analyse erheblich einfacher und
   unabhängiger von Proxy-Goodwill und Packing.
 
+### 3.5 Bambu Studio in Docker als Capture-Lab — geht, mit Vorbehalten
+
+Reizvoll, weil man im Container **volle Netz-/Cert-Kontrolle** hat (reproduzierbar, isoliert).
+
+**Vorbehalte (ehrlich):**
+- **Kein offizielles Image.** Es gibt **Community-Images** (Studio über **VNC/noVNC** + Software-GL
+  via Mesa/llvmpipe). Qualität variiert — Image prüfen/selbst bauen.
+- Studio bleibt eine **GUI-App** (der Filament Manager ist sogar eine **Web-View** → braucht
+  ggf. CEF/Chromium im Container; etwas heikler als reine 2D-UI).
+- Das **Netzwerk-Plugin** (`libbambu_networking.so`) wird beim 1. Start **nachgeladen** →
+  Container braucht initial Internet.
+- **Account-Login** erfolgt interaktiv über den noVNC-Desktop.
+- **Nur für Capture/RE nötig — die Bridge selbst braucht KEIN Bambu Studio** (sie spricht MQTT
+  direkt mit dem Drucker).
+
+**Einfachste Verdrahtung (Proxy-Env statt iptables):** Der Plugin-libcurl beachtet
+`HTTPS_PROXY`; damit reicht ein normaler mitmproxy (kein NET_ADMIN/transparent nötig).
+
+```yaml
+services:
+  mitm:
+    image: mitmproxy/mitmproxy
+    command: mitmdump --listen-port 8080 -s /addon/mitm_bambu_addon.py --set confdir=/conf
+    volumes:
+      - ./scripts:/addon            # mitm_bambu_addon.py
+      - ./captures:/captures        # results land here
+      - mitm-conf:/conf             # CA lives at /conf/mitmproxy-ca-cert.pem
+    environment: { BAMBU_CAPTURE_DIR: /captures }
+
+  studio:
+    image: <community-bambu-studio-novnc>     # pick/build one; exposes noVNC on :6080
+    depends_on: [mitm]
+    ports: ["6080:6080"]
+    environment:
+      HTTPS_PROXY: http://mitm:8080
+      HTTP_PROXY:  http://mitm:8080
+    volumes:
+      - mitm-conf:/mitm:ro
+      - studio-data:/config
+    # ENTRYPOINT-Wrapper VOR dem Studio-Start:
+    #   cat /mitm/mitmproxy-ca-cert.pem >> <resources>/cert/slicer_base64.cer
+    #   (Cert-Bundle-Trick, §3.3) — danach Studio normal starten.
+
+volumes: { mitm-conf: {}, studio-data: {} }
+```
+
+**Ablauf:** Container hoch → noVNC im Browser (`:6080`) → einloggen → Filament Manager öffnen +
+Sync → `captures/filament_list.json` + `captures/bambu_flows.jsonl` erscheinen → in den
+Importer (`file`-Modus) geben.
+
+> **Alternative, oft einfacher:** Wenn du einen Linux-**Desktop** hast, Studio dort **nativ**
+> starten + mitmproxy (kein GUI-in-Container-Aufwand). Docker lohnt v. a. für Wiederholbarkeit
+> oder einen headless Node.
+
 ---
 
 ## 4. Capture-Plan: Welche Aktionen in Bambu Studio auslösen
