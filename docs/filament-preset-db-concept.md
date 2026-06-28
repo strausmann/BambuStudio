@@ -1,0 +1,105 @@
+# Konzept: Filament-Preset-Datenbank + Preset-Sync ins Bambu-Konto
+
+> Antwort auf: „Gibt es Erfahrungen/Datenbanken für Filament-Presets? Wie füge ich ein Preset
+> (Hersteller/Typ/Farbe/K-Wert) hinzu, via API + Docker, idealerweise aus einer Online-DB?"
+
+## 1. Wichtige Klarstellung: Preset ≠ K-Wert
+
+Es gibt **zwei getrennte Ebenen**, die oft verwechselt werden:
+
+| | **Filament-Preset (statisch)** | **K-Wert / Pressure Advance (Kalibrierung)** |
+|---|---|---|
+| Inhalt | Hersteller, Typ, Farbe, Temps, `filament_flow_ratio`, Dichte, Durchmesser, `filament_id` | Pressure Advance (k), Flow-Dynamics — **pro Filament + Düse + Drucker** |
+| Wo gespeichert | Slicer-Preset-JSON; synct als **User-Preset** ins Konto | **Drucker-Kalibriertabelle** (`cali_idx`), nicht im Preset; cloud-synced |
+| Bambu-Besonderheit | Bambu-Presets enthalten **kein** `pressure_advance` (nur `filament_flow_ratio`) | K wird per **Flow-Dynamics-Kalibrierung** am Drucker gesetzt, Tray referenziert `cali_idx` |
+| OrcaSlicer/Generic | `pressure_advance` **kann** im Filament-Preset stehen | dito, je nach Drucker |
+
+→ **„K-Wert tracken"** heißt: pro (Hersteller, Typ, ggf. Düse) einen kalibrierten k speichern und
+ihn entweder (a) in der Drucker-Kalibrierung setzen (MQTT, `cali_idx`) oder (b) bei
+Klipper-/Generic-Workflows ins Preset schreiben. Im Bambu-AMS sahen wir `cali_idx` bereits am Tray.
+
+## 2. Gibt es schon Datenbanken? — Ja, mehrere
+
+- **BambuStudio-Bundle (DIESES Repo):** `resources/profiles/<Vendor>/filament/*.json`, via
+  `inherits` verkettet. Bereits **1927 Presets / 6 Vendors** (Bambu Lab, Generic, Overture,
+  Polymaker, QIDI, eSUN) → extrahiert von `scripts/build_catalog.py` nach `catalog.json`.
+- **OrcaSlicer-Profile** (`SoftFever/OrcaSlicer`, `resources/profiles/`): die **größte offene**
+  Preset-DB (viele weitere Vendor + Generic) — idealer zusätzlicher Seed.
+- **Bambu-Cloud filament-config** (`get_filament_config`): Marken-/Typ-**Katalog** des Kontos
+  (was der Filament Manager zeigt).
+- **Spoolman:** **Inventar**-DB (Vendor/Material/Dichte/Durchmesser/Farbe/Temps + Extra-Fields) —
+  **keine** Slicer-Presets, aber hier tracken wir die physischen Spulen und können den **k als
+  Extra-Field** ablegen.
+- Community: `filamentcolors.xyz` (Farben), OpenTag (Tag-Spec/DB) — kein Preset/k-Fokus.
+
+> Eine **einzige** maßgebliche „Online-DB mit K-Werten pro Vendor" gibt es nicht — weil k
+> drucker-/düsenspezifisch ist. OrcaSlicer-Repo ist die beste Preset-Basis; die k-Ebene bauen
+> wir selbst (unsere Kalibrierwerte).
+
+## 3. Ein Preset hinzufügen — Format (Bambu/Orca)
+
+Presets sind JSON mit `inherits`-Kette (Nozzle-Variante → `@base` → `fdm_filament_<typ>`).
+Minimal für ein neues Vendor-Filament:
+
+```json
+{
+  "type": "filament",
+  "name": "eSUN PLA+ Grün @BBL X1C",
+  "inherits": "fdm_filament_pla",
+  "filament_vendor": ["eSUN"],
+  "filament_type": ["PLA"],
+  "filament_id": ["P<eigene-id>"],
+  "nozzle_temperature": ["215"],
+  "hot_plate_temp": ["60"],
+  "filament_flow_ratio": ["0.98"],
+  "filament_density": ["1.24"],
+  "filament_diameter": ["1.75"],
+  "filament_max_volumetric_speed": ["12"],
+  "default_filament_colour": ["#00AE42"],
+  "compatible_printers": ["Bambu Lab X1 Carbon 0.4 nozzle"]
+}
+```
+- **Supporteter Weg ins Konto:** in Bambu Studio importieren/anlegen → als User-Preset speichern
+  → **Auto-Cloud-Sync** (Spec §1.6). Kein RE nötig.
+- **Per API:** `put_setting` (Plugin-Export bestätigt) → Route-Familie
+  `/v1/iot-service/api/slicer/setting`. Endpoint/Body erst per Capture bestätigen (Spec).
+
+## 4. Architektur: eigene Katalog-DB + Docker-Tool + Online-Feed
+
+```
+[Online-Katalog-DB]            (git-Repo aus JSON  ODER kleiner REST-Service)
+  vendor/type/color/hex/temps/flow/density/diameter/recommended_k/source/notes
+        │  (seed: OrcaSlicer + Bambu-Bundle via build_catalog.py + eigene Kalibrierungen)
+        ▼
+[preset-tool  (Docker)]
+  ├─ generiert Bambu/Orca-Preset-JSON (inherits → richtige Basis)
+  ├─ push ins Konto via put_setting  (nach RE)   ── ODER ── Export zum manuellen Import
+  ├─ legt/aktualisiert Spoolman-Filament an (k als Extra-Field)
+  └─ (optional) setzt Flow-Dynamics/k am Drucker via MQTT (cali_idx)
+        ▼
+[Bambu-Konto / Spoolman / Drucker]
+```
+
+- **Idempotent:** Presets über `name`/`filament_id` erkennen; Spoolman über vorhandene Felder.
+- **Online-Feed:** Katalog als versioniertes JSON-Repo (einfach, diffbar, PR-fähig) — bei Bedarf
+  später ein kleiner FastAPI-Service mit `/catalog`-Endpoint.
+- **Wiederverwendung:** baut auf der bestehenden `tools/bambu-spoolman-bridge` auf (gleicher
+  Spoolman-Client, gleiche Docker-Logik).
+
+## 5. Schema der eigenen DB (Seed liegt schon vor)
+
+`catalog.json` (von `build_catalog.py`), pro Eintrag:
+`name, vendor, type, filament_id, flow_ratio, density, diameter, nozzle_temp, bed_temp,
+max_vol_speed, color_hex, k_value(null→eigene Kalibrierung)`.
+
+→ **Erweitern um:** `color_name`, mehrere `k_value` pro Düse (0.2/0.4/0.6/0.8), `source`,
+`verified`, `notes`. Damit ist die DB sofort nutzbar und wächst mit deinen Kalibrierungen.
+
+## 6. Status / nächste Schritte
+
+- [x] Seed-Katalog aus Repo-Profilen (`build_catalog.py`, 1927 Presets).
+- [ ] OrcaSlicer-Profile als zusätzlichen Seed einlesen (mehr Vendor).
+- [ ] k-/Farb-Ebene + Schema-Erweiterung.
+- [ ] Preset-Generator (Katalog-Eintrag → Bambu/Orca-JSON).
+- [ ] `put_setting`-Endpoint per Capture bestätigen (Spec) → Push ins Konto.
+- [ ] Spoolman-Anlage aus Katalog (Material/Temps/k).
