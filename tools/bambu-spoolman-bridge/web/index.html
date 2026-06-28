@@ -1,73 +1,129 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Bambu ↔ Spoolman Bridge</title>
   <link rel="manifest" href="/static/manifest.webmanifest" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <!-- Tailwind via Play CDN (prototype; production = compiled build, see Dockerfile note) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'media' }</script>
 </head>
-<body>
-  <header>
-    <h1>Bambu ↔ Spoolman Bridge</h1>
-    <span id="caps" class="caps"></span>
-  </header>
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100">
+  <div class="max-w-3xl mx-auto p-4 pb-24">
+    <header class="flex items-center gap-3 border-b border-slate-200 dark:border-slate-700 pb-3 mb-4">
+      <h1 class="text-lg font-bold">🧵 Bambu ↔ Spoolman Bridge</h1>
+      <span id="caps" class="text-xs opacity-60 ml-auto"></span>
+    </header>
 
-  <section>
-    <h2>Neue Spulen (RFID erkannt, noch nicht zugeordnet)</h2>
-    <div id="pending" class="cards"><p class="muted">— lädt —</p></div>
-  </section>
+    <!-- tabs -->
+    <nav class="flex flex-wrap gap-2 mb-4 text-sm">
+      <button data-tab="onboard"  class="tab px-3 py-1.5 rounded-lg bg-emerald-600 text-white">Onboarding</button>
+      <button data-tab="spoolmandb" class="tab px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700">SpoolmanDB</button>
+      <button data-tab="preset"   class="tab px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700">Preset-Generator</button>
+      <button data-tab="cloud"    class="tab px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700">Cloud-Import</button>
+      <button data-tab="nfc"      class="tab px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700">NFC</button>
+    </nav>
 
-  <section>
-    <h2>Freie Tags (wiederverwendbar)</h2>
-    <div id="free" class="cards"><p class="muted">—</p></div>
-  </section>
+    <!-- ONBOARDING -->
+    <section data-panel="onboard" class="space-y-4">
+      <div>
+        <h2 class="font-semibold mb-2">Neue Spulen (RFID erkannt)</h2>
+        <div id="pending" class="space-y-2"><p class="text-sm opacity-60">— lädt —</p></div>
+      </div>
+      <div>
+        <h2 class="font-semibold mb-2">Freie Tags</h2>
+        <div id="free" class="space-y-2"><p class="text-sm opacity-60">—</p></div>
+      </div>
+      <div>
+        <h2 class="font-semibold mb-2">AMS-Geräte</h2>
+        <div id="ams" class="text-sm opacity-70">—</div>
+      </div>
+    </section>
 
-  <section>
-    <h2>Custom-NFC-Tag (Drittanbieter) — lesen / schreiben</h2>
-    <div class="row">
-      <button id="nfc-read">Tag lesen</button>
-      <pre id="nfc-out" class="out">—</pre>
-    </div>
-    <div class="grid">
-      <label>type <input id="w-type" value="PLA" /></label>
-      <label>color_hex <input id="w-color" value="FFFFFF" /></label>
-      <label>brand <input id="w-brand" value="Sunlu" /></label>
-      <label>min_temp <input id="w-min" value="190" /></label>
-      <label>max_temp <input id="w-max" value="230" /></label>
-      <label>spoolman_id <input id="w-spool" value="" /></label>
-    </div>
-    <button id="nfc-write">OpenSpool-Tag schreiben</button>
-  </section>
+    <!-- SPOOLMANDB -->
+    <section data-panel="spoolmandb" class="hidden space-y-3">
+      <p class="text-sm opacity-70">Filamente aus der Online-DB <a class="underline" href="https://donkie.github.io/SpoolmanDB/" target="_blank">SpoolmanDB</a> (MIT) in Spoolman anlegen.</p>
+      <button id="spdb-load" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">Datenbank laden</button>
+      <div id="spdb-meta" class="text-xs opacity-60"></div>
+      <div><div class="text-sm font-medium mb-1">Hersteller</div><div id="spdb-vendors" class="flex flex-wrap gap-1.5"></div></div>
+      <div><div class="text-sm font-medium mb-1">Typen</div><div id="spdb-types" class="flex flex-wrap gap-1.5"></div></div>
+      <div class="flex gap-2">
+        <button id="spdb-dry" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-sm">Vorschau (Dry-Run)</button>
+        <button id="spdb-import" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">Importieren</button>
+      </div>
+      <pre id="spdb-out" class="text-xs bg-slate-100 dark:bg-slate-800 rounded-lg p-2 overflow-auto max-h-60">—</pre>
+    </section>
 
-  <section>
-    <h2>Cloud-Bibliothek → Spoolman importieren</h2>
-    <div class="row">
-      <button id="cloud-dry" class="ghost">Dry-Run (live)</button>
-      <button id="cloud-import">Importieren (live)</button>
-    </div>
-    <pre id="cloud-out" class="out">Endpoint ist eine Hypothese — erst Dry-Run. Datei-Import via API möglich.</pre>
-  </section>
+    <!-- PRESET GENERATOR -->
+    <section data-panel="preset" class="hidden space-y-3">
+      <p class="text-sm opacity-70">Bambu-Filament-Preset erzeugen → in Bambu Studio importieren (User-Preset → Cloud-Sync → Drucker-Display).</p>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <label class="flex flex-col">Hersteller<input id="p-vendor" class="inp" value="eSUN"></label>
+        <label class="flex flex-col">Material<input id="p-material" class="inp" value="PLA"></label>
+        <label class="flex flex-col">Name<input id="p-name" class="inp" value="eSUN PLA+ Grün"></label>
+        <label class="flex flex-col">Farbe (hex)<input id="p-color" class="inp" value="00AE42"></label>
+        <label class="flex flex-col">Düsentemp<input id="p-nozzle" class="inp" value="215"></label>
+        <label class="flex flex-col">Betttemp<input id="p-bed" class="inp" value="60"></label>
+        <label class="flex flex-col">Flow-Ratio<input id="p-flow" class="inp" value="0.98"></label>
+        <label class="flex flex-col">Dichte<input id="p-density" class="inp" value="1.24"></label>
+        <label class="flex flex-col">max. Vol.-Speed<input id="p-vol" class="inp" value="12"></label>
+        <label class="flex flex-col">Drucker<input id="p-printer" class="inp" value="Bambu Lab X1 Carbon 0.4 nozzle"></label>
+      </div>
+      <div class="flex gap-2">
+        <button id="p-gen" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">Preset erzeugen</button>
+        <button id="p-dl" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-sm hidden">⬇ JSON herunterladen</button>
+      </div>
+      <pre id="p-out" class="text-xs bg-slate-100 dark:bg-slate-800 rounded-lg p-2 overflow-auto max-h-72">—</pre>
+    </section>
+
+    <!-- CLOUD IMPORT -->
+    <section data-panel="cloud" class="hidden space-y-3">
+      <p class="text-sm opacity-70">Bambu-Filament-Bibliothek → Spoolman. Endpoint ist Hypothese — erst Dry-Run.</p>
+      <div class="flex gap-2">
+        <button id="cloud-dry" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-sm">Dry-Run (live)</button>
+        <button id="cloud-import" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">Importieren (live)</button>
+      </div>
+      <pre id="cloud-out" class="text-xs bg-slate-100 dark:bg-slate-800 rounded-lg p-2 overflow-auto max-h-60">—</pre>
+    </section>
+
+    <!-- NFC -->
+    <section data-panel="nfc" class="hidden space-y-3">
+      <p class="text-sm opacity-70">Custom-NFC-Tags (Dritthersteller) lesen/schreiben — gleiches OpenSpool-Format wie das ESP32. Braucht HTTPS.</p>
+      <div class="flex gap-2 items-center">
+        <button id="nfc-read" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-sm">Tag lesen</button>
+      </div>
+      <pre id="nfc-out" class="text-xs bg-slate-100 dark:bg-slate-800 rounded-lg p-2 overflow-auto max-h-40">—</pre>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <label class="flex flex-col">type<input id="w-type" class="inp" value="PLA"></label>
+        <label class="flex flex-col">color_hex<input id="w-color" class="inp" value="FFFFFF"></label>
+        <label class="flex flex-col">brand<input id="w-brand" class="inp" value="Sunlu"></label>
+        <label class="flex flex-col">min_temp<input id="w-min" class="inp" value="190"></label>
+        <label class="flex flex-col">max_temp<input id="w-max" class="inp" value="230"></label>
+        <label class="flex flex-col">spoolman_id<input id="w-spool" class="inp" value=""></label>
+      </div>
+      <button id="nfc-write" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">OpenSpool-Tag schreiben</button>
+    </section>
+  </div>
 
   <!-- bind dialog -->
-  <dialog id="bind-dlg">
-    <form method="dialog">
-      <h3>Spule zuordnen</h3>
-      <p id="bind-info" class="muted"></p>
-      <label>Spoolman-Spool-ID
-        <input id="bind-spool" type="number" inputmode="numeric" />
-      </label>
-      <div class="row">
-        <button id="bind-scan" type="button">QR scannen</button>
-        <span id="bind-scaninfo" class="muted"></span>
+  <dialog id="bind-dlg" class="rounded-xl p-4 backdrop:bg-black/40 bg-white dark:bg-slate-800 dark:text-slate-100 w-80 max-w-[90vw]">
+    <form method="dialog" class="space-y-3">
+      <h3 class="font-semibold">Spule zuordnen</h3>
+      <p id="bind-info" class="text-xs opacity-60"></p>
+      <label class="flex flex-col text-sm">Spoolman-Spool-ID<input id="bind-spool" type="number" class="inp"></label>
+      <div class="flex gap-2 items-center">
+        <button id="bind-scan" type="button" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-sm">QR scannen</button>
+        <span id="bind-scaninfo" class="text-xs opacity-60"></span>
       </div>
-      <menu>
-        <button value="cancel">Abbrechen</button>
-        <button id="bind-ok" value="ok">Zuordnen</button>
+      <menu class="flex gap-2 justify-end p-0">
+        <button value="cancel" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-sm">Abbrechen</button>
+        <button id="bind-ok" value="ok" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">Zuordnen</button>
       </menu>
     </form>
   </dialog>
 
+  <style type="text/tailwindcss">.inp{ @apply rounded-md border border-slate-300 dark:border-slate-600 bg-transparent px-2 py-1; }</style>
   <script src="/static/app.js"></script>
 </body>
 </html>

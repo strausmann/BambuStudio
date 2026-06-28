@@ -28,7 +28,9 @@ from .jobs import JobTracker
 from .labels import LabelClient
 from .models import Tray, density_for, material_family
 from .mqtt_ingest import BambuPrinterMQTT, tcp_reachable
+from .preset_gen import generate as generate_preset
 from .spoolman import SpoolmanClient
+from . import spoolmandb
 from .tags import TagService
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -65,6 +67,8 @@ class Bridge:
         self.jobs = JobTracker(self)
         self.cloud_importer = CloudLibraryImporter(self.spoolman, self.db)
         self.cloud_cfg = self.cfg.get("cloud_library", {})
+        self.spoolmandb_url = self.cfg.get("spoolmandb", {}).get("url", spoolmandb.DEFAULT_URL)
+        self._spdb_cache: list[dict] | None = None
         self.public_url = self.cfg.get("spoolman_public_url", sm.get("base_url", "")).rstrip("/")
         self.label_on_onboard = bool(lp.get("print_on_onboard", False))
 
@@ -321,6 +325,11 @@ class Bridge:
         log.warning("printer %s: no usable transport (need lan.host or bambu_account.token)", p.get("name"))
         return None
 
+    def spoolmandb_entries(self, refresh: bool = False) -> list[dict]:
+        if self._spdb_cache is None or refresh:
+            self._spdb_cache = spoolmandb.fetch(self.spoolmandb_url)
+        return self._spdb_cache
+
     def run_cloud_import(self, source: str = "live", path: str = "", dry_run: bool = True) -> dict[str, Any]:
         """Import the cloud filament library into Spoolman (concept §6).
         source='file' reads a saved capture (path); source='live' calls the cloud REST."""
@@ -376,6 +385,27 @@ class CloudImportReq(BaseModel):
     dry_run: bool = True
 
 
+class SpoolmanDBImportReq(BaseModel):
+    vendors: list[str] = []
+    types: list[str] = []
+    dry_run: bool = True
+
+
+class PresetReq(BaseModel):
+    vendor: str = ""
+    material: str = "PLA"
+    name: str = ""
+    color_hex: str = ""
+    nozzle_temp: int | None = None
+    bed_temp: int | None = None
+    flow_ratio: float | None = None
+    density: float | None = None
+    diameter: float = 1.75
+    max_vol_speed: float | None = None
+    filament_id: str = ""
+    compatible_printer: str = "Bambu Lab X1 Carbon 0.4 nozzle"
+
+
 # ---- routes --------------------------------------------------------------
 @app.get("/api/state")
 def api_state() -> dict[str, Any]:
@@ -413,6 +443,28 @@ def api_cloud_import(req: CloudImportReq) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"cloud import failed: {e}")
+
+
+@app.get("/api/spoolmandb/summary")
+def api_spoolmandb_summary(refresh: bool = False) -> dict[str, Any]:
+    try:
+        return spoolmandb.summary(bridge.spoolmandb_entries(refresh=refresh))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"SpoolmanDB fetch failed: {e}")
+
+
+@app.post("/api/spoolmandb/import")
+def api_spoolmandb_import(req: SpoolmanDBImportReq) -> dict[str, Any]:
+    try:
+        entries = bridge.spoolmandb_entries()
+        return spoolmandb.import_selected(bridge.spoolman, entries, req.vendors, req.types, req.dry_run)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"SpoolmanDB import failed: {e}")
+
+
+@app.post("/api/preset/generate")
+def api_preset_generate(req: PresetReq) -> dict[str, Any]:
+    return generate_preset(**req.model_dump())
 
 
 @app.post("/api/onboard_auto")

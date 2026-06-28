@@ -46,6 +46,9 @@ label_printer:
 
 spoolman_public_url: "http://spoolman:7912"   # used to build qr_payload (/spool/{id})
 
+spoolmandb:                         # community filament DB (MIT) for Spoolman bulk-create
+  url: "https://donkie.github.io/SpoolmanDB/filaments.json"
+
 cloud_library:                      # import Bambu Filament Manager library -> Spoolman (concept §6)
   enabled: false
   api_host: ""                      # empty -> derived from region (api.bambulab.com / .cn)

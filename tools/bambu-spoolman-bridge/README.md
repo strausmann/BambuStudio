@@ -104,6 +104,16 @@ OpenSpoolMan / BambuSpoolPal convention so tools interoperate:
 | POST | `/api/free` `{tag_uid}` | mark tag reusable |
 | POST | `/api/reassign` `{tag_uid, spool_id, spool_material}` | reuse on third-party (compat-checked) |
 | POST | `/api/label/{spool_id}` | print a label |
+| GET | `/api/spoolmandb/summary` | vendors/types from SpoolmanDB (online, MIT) |
+| POST | `/api/spoolmandb/import` `{vendors,types,dry_run}` | bulk-create selected filaments in Spoolman |
+| POST | `/api/preset/generate` `{vendor,material,…}` | build a Bambu filament preset JSON (Studio import) |
+
+## UI
+
+Tailwind (Play CDN) PWA with tabs: **Onboarding** (pending RFID, free tags, AMS),
+**SpoolmanDB** (pick vendor+type → dry-run/import), **Preset-Generator** (form → download
+Bambu preset JSON), **Cloud-Import**, **NFC** (read/write OpenSpool tags). HTTPS required for
+Web NFC/camera — front it with a reverse proxy (concept §12).
 
 ## License
 

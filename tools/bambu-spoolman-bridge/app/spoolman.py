@@ -97,13 +97,21 @@ class SpoolmanClient:
 
     def create_filament(self, name: str, material: str, color_hex: str, weight: float,
                         diameter: float, density: float, vendor_id: int | None,
-                        extra: dict[str, Any] | None = None) -> dict:
+                        extra: dict[str, Any] | None = None,
+                        spool_weight: float | None = None,
+                        extruder_temp=None, bed_temp=None) -> dict:
         body: dict[str, Any] = {
             "name": name, "material": material, "density": density, "diameter": diameter,
-            "weight": weight, "color_hex": (color_hex or "").lstrip("#"),
+            "weight": weight, "color_hex": (color_hex or "").lstrip("#")[:6],
         }
         if vendor_id is not None:
             body["vendor_id"] = vendor_id
+        if spool_weight is not None:
+            body["spool_weight"] = spool_weight
+        if extruder_temp is not None:
+            body["settings_extruder_temp"] = int(extruder_temp)
+        if bed_temp is not None:
+            body["settings_bed_temp"] = int(bed_temp)
         if extra:
             body["extra"] = _encode_extra(extra)
         r = self._http.post(f"{self.base}/api/v1/filament", json=body)
