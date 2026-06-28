@@ -137,7 +137,60 @@ hinterlegt ist**.
   `command_get_pa_calibration_tab` / `..._set` — MQTT) und in der Katalog-DB pro (Vendor/Typ/Düse)
   pflegen.
 
-## 9. Status / nächste Schritte
+### 8.1 Prozess: cali_idx / k-Wert am Drucker erstellen (Flow Dynamics / Pressure Advance)
+
+**In Bambu Studio (Standardweg):**
+1. **Kalibrierung → „Dynamischer Fluss" / Flow Dynamics (Pressure Advance)**.
+2. Drucker, **Düsendurchmesser** und das/die geladenen **Filament(e)** wählen → **Start**.
+3. **X1/X1C:** misst k automatisch per Lidar. **P1/A1:** druckt ein Test-Muster → beste Linie
+   wählen (oder Auto). Ergebnis = **k** (und `n`).
+4. **Speichern unter Namen** → der Eintrag landet in der **PA-Tabelle des Druckers** mit einem
+   `cali_idx`, gebunden an `setting_id` (= Filament-Preset) **+ Düsendurchmesser**.
+5. Beim Einlegen einer Spule **dieses Filaments** matcht der Drucker per `setting_id` und wendet
+   die Kalibrierung automatisch an → der Tray meldet den `cali_idx` (das liest unsere Bridge).
+- **Manuell:** Geräte-/AMS-Material-Einstellung → **k direkt eingeben** (intern
+  `command_extrusion_cali_set(tray, setting_id, name, k, n, …)`).
+- **Programmatisch (unser Tool, MQTT):** `command_start_pa_calibration` →
+  `command_set_pa_calibration(PACalibResult{k,n,setting_id,name,nozzle_diameter})` →
+  `command_get_pa_calibration_tab` / `command_select_pa_calibration(cali_idx)`.
+  *(Auf neuerer Firmware ggf. LAN-/Developer-Mode-abhängig — beim Capture verifizieren.)*
+
+**Geltungsbereich — gilt der k pro Spule oder pro Filament?**
+- **Pro Filament(-Preset) + Düsendurchmesser — NICHT pro physischer Spule.**
+- Eine Kalibrierung für **„Bambu PLA Basic" @0.4** gilt für **alle Farben** dieses Filaments
+  (Grau, Rot, …) und **alle Spulen** davon. **Nicht** pro neuer Spule wiederholen. Farbe hat
+  i. d. R. **vernachlässigbaren** Einfluss auf k.
+- **Neu kalibrieren** nur bei: **Düsenwechsel (Größe)**, **deutlich anderem Material/Marke**
+  (z. B. PLA Matte vs PLA Basic vs PLA-CF; eSUN vs Bambu), oder sichtbaren PA-Artefakten.
+- Bambu hält **mehrere** Einträge (je Filament+Düse); das AMS wählt automatisch den passenden
+  via `setting_id` → daher der `cali_idx` am Tray.
+
+→ Für unsere Katalog-DB heißt das: **ein `k_value` pro (Vendor/Typ/Düse)** genügt — nicht pro Spule.
+
+## 9. Lizenzen: dürfen wir die Presets kopieren?
+
+| Quelle | Lizenz | Verwenden/Anpassen | Weiterverteilen |
+|--------|--------|--------------------|-----------------|
+| **OrcaSlicer-Profile** | **AGPL-3.0** | ✅ | nur unter **AGPL-3.0** (Copyleft + Quelloffenlegung, auch „über Server") + Attribution |
+| **BambuStudio-Profile** (dieses Repo) | **AGPL-3.0** | ✅ | dito |
+| **SpoolmanDB** | **MIT** | ✅ | ✅ sehr frei (nur Copyright-/Lizenzhinweis behalten) |
+
+**Konsequenzen:**
+- **OrcaSlicer-Presets „einfach kopieren": ja zum Nutzen/Anpassen** — aber **Weiterverteilen löst
+  AGPL-3.0 aus** (Tool/Repo muss AGPL-kompatibel sein und Quelle bereitstellen).
+- **Da unser Tool ohnehin in diesem AGPL-3.0-Repo lebt, ist das Bundeln/Ableiten AGPL-konsistent**
+  (Attribution nicht vergessen). Für ein **permissiv** lizenziertes Standalone-Tool die
+  AGPL-Profile **nicht** bundlen — stattdessen zur Laufzeit aus der lokalen Studio/Orca-Installation
+  des Nutzers lesen (keine Weiterverteilung) **oder** nur **SpoolmanDB (MIT)** nutzen.
+- **Reine Fakten** (Temperatur, Dichte) sind nicht urheberrechtlich schützbar; die **JSON-Dateien
+  + die Zusammenstellung** aber schon → im Zweifel **AGPL behandeln**.
+
+**Empfehlung (sauber & lizenzkonform):**
+- **Spoolman-Seite:** **SpoolmanDB (MIT)** → unkompliziert in jedes Tool.
+- **Bambu-Preset-Seite:** Katalog/Generator **in diesem AGPL-Repo** halten (passt), oder Presets
+  beim Nutzer lokal aus Studio/Orca lesen statt sie zu redistribuieren.
+
+## 10. Status / nächste Schritte
 
 - [x] Seed-Katalog aus Repo-Profilen (`build_catalog.py`, 1927 Einträge).
 - [x] `cali_idx`-Tracking pro Spule → Spoolman-Extra `cali_idx`/`calibrated` (Bridge).
