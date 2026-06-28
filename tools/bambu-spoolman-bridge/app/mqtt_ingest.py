@@ -159,6 +159,10 @@ class BambuPrinterMQTT:
     def request_topic(self) -> str:
         return f"device/{self.serial}/request"
 
+    def publish_command(self, payload: dict) -> None:
+        """Publish a command JSON to device/<serial>/request (write path)."""
+        self._client.publish(self.request_topic, json.dumps(payload))
+
     def start(self) -> None:
         def run():
             try:

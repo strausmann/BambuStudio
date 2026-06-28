@@ -107,6 +107,11 @@ OpenSpoolMan / BambuSpoolPal convention so tools interoperate:
 | GET | `/api/spoolmandb/summary` | vendors/types from SpoolmanDB (online, MIT) |
 | POST | `/api/spoolmandb/import` `{vendors,types,dry_run}` | bulk-create selected filaments in Spoolman |
 | POST | `/api/preset/generate` `{vendor,material,…}` | build a Bambu filament preset JSON (Studio import) |
+| GET | `/api/printers` · `/api/printers/{serial}/ams` | ESP32 slot selector: printers, AMS+slots |
+| POST | `/api/slot/stage` · `/api/slot/assign` | ESP32 bind flow: stage a slot, assign a filament |
+| POST | `/api/cali/set` `{ams_id,tray_id,k,n}` | write k to printer *(gated: ams.allow_k_write)* |
+| GET | `/api/kcatalog` | observed k per (vendor/material/nozzle) |
+| POST | `/api/ams/unload` `{ams_id}` | unload a slot *(gated: ams.allow_unload)* |
 
 ## UI
 

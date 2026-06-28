@@ -210,4 +210,6 @@ So siehst du je geladener Spule den **echten k-Wert** und ob am Drucker kalibrie
 - [ ] OrcaSlicer-Profile als zusätzlichen Seed einlesen (mehr Vendor).
 - [ ] Preset-Generator (Katalog-Eintrag → Bambu/Orca-JSON) für Display/Konto.
 - [ ] `put_setting`-Endpoint per Capture bestätigen (Spec) → Preset-Push ins Konto.
-- [ ] konkreten **k-Wert** aus Drucker-PA-Tabelle lesen/setzen (MQTT) + im Katalog pflegen.
+- [x] **k lesen** (aus MQTT-Tray) + **k-Katalog** pro (Vendor/Typ/Düse) (`app/kcatalog.py`, `/api/kcatalog`).
+- [x] **k setzen** an den Drucker (`/api/cali/set` → `extrusion_cali_set`), gated `ams.allow_k_write`.
+- [ ] volle PA-Tabelle (nicht geladene Filamente) lesen; Dev-Mode-Verifikation fürs Schreiben.

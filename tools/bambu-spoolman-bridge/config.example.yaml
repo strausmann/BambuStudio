@@ -31,6 +31,9 @@ onboard:
 
 ams:
   override_settings: false          # needs Developer Mode -> keep false (concept §5.5)
+  nozzle: "0.4"                     # nozzle diameter for k-catalog keying
+  allow_k_write: false              # allow writing k to the printer (extrusion_cali_set); verify Dev-Mode
+  allow_unload: false               # allow ESP32/UI-triggered AMS unload (ams_change_filament)
   # Friendly Spoolman location names per AMS serial (learned via get_version).
   # Leave empty to auto-name as "AMS 2 Pro (SN-suffix)". Find the SN in the logs.
   aliases:
