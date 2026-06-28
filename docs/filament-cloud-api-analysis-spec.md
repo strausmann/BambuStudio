@@ -454,6 +454,28 @@ Bestätigte (Export-)API-Oberfläche, u. a.:
 → Für unser Vorhaben: **Weg 1 (mitmproxy)**; der `file`-Modus des Cloud-Importers
 (`tools/bambu-spoolman-bridge`) testet das Mapping dann gegen den Capture, bevor der Pfad fix ist.
 
+### 5.3 Methodik-Präzedenz: so hat `ClusterM/open-bambu-networking` es gemacht
+
+Das am besten dokumentierte RE-Projekt (`NETWORK_PLUGIN.md`) bestätigt genau diesen Ansatz und
+nennt **drei Beweisquellen** (mit „source vs MITM"-Tagging):
+1. **Quellcode** des offenen `bambulab/BambuStudio` (Datei+Zeile) — wie unser §1.
+2. **MITM-Capture** des stock-Plugins gegen `api.bambulab.com`/MakerWorld/LAN — „to reverse the
+   wire format the closed-source binary actually produces" — wie unser §3.
+3. **Cross-ABI-Harness:** stock-`.so` laden, `BBL::PrintParams`-Felder togglen, Payload diffen
+   (v. a. fürs MQTT-Print-Mapping).
+
+**Ausdrücklich NICHT genutzt:** kein Ghidra/IDA, kein Frida/gdb, **kein Entpacken** des Binaries.
+→ Unsere `strings`/static-Sackgasse (§5.2) ist also erwartbar, nicht ein Fehler.
+
+**Cert/Pinning:** Sie mussten für die **Cloud-HTTPS kein Pinning umgehen**; „Developer Mode"
+betraf nur die **Drucker-MQTT-Signatur**, nicht die Cloud. → stützt die Annahme, dass der
+**Cert-Bundle-Trick (§3.3) für den Filament-REST-Endpoint genügt** — ohne Developer Mode, also
+ohne Verlust der Bambu-Cloud.
+
+**Lücke:** Ihre Doku deckt Presets/Slicer/Print/Upload ab, **nicht** die neuen
+Filament-Spool-Endpoints (02.06+, bei ihnen „out of scope") → den Filament-Pfad capturen wir
+selbst, aber mit dieser validierten Methode.
+
 ---
 
 ## 6. Troubleshooting / bekannte Fallstricke
